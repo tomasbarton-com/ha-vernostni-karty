@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Loyalty Cards – Setup",
+        "description": "Configure the Loyalty Cards integration.",
+        "data": {
+          "device_trackers": "Location trackers (phones)",
+          "global_proximity_m": "Distance for \"nearby\" detection (meters)",
+          "notifications_enabled": "Enable notifications when arriving at a store",
+          "notification_dwell_minutes": "Minimum time at location before notification (minutes)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Loyalty Cards integration is already installed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Loyalty Cards Settings",
+        "data": {
+          "device_trackers": "Location trackers (phones)",
+          "global_proximity_m": "Distance for \"nearby\" detection (meters)",
+          "notifications_enabled": "Enable notifications",
+          "notification_dwell_minutes": "Minimum time at location (minutes)"
+        }
+      }
+    }
+  }
+}

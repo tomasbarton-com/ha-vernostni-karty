@@ -1,0 +1,294 @@
+add_store:
+  name: Přidat obchod
+  description: Přidá nový obchod do seznamu věrnostních karet.
+  fields:
+    name:
+      name: Název
+      description: Název obchodu
+      required: true
+      example: "Albert"
+      selector:
+        text:
+    category:
+      name: Kategorie
+      description: Kategorie obchodu
+      default: other
+      selector:
+        select:
+          options:
+            - groceries
+            - drugstore
+            - pharmacy
+            - diy
+            - electronics
+            - sport
+            - fashion
+            - fastfood
+            - other
+    tile_color:
+      name: Barva dlaždice
+      description: Barva pozadí dlaždice v hex formátu
+      default: "#1976d2"
+      selector:
+        color_rgb:
+
+update_store:
+  name: Aktualizovat obchod
+  description: Aktualizuje informace o obchodě.
+  fields:
+    store_id:
+      name: ID obchodu
+      description: UUID obchodu
+      required: true
+      selector:
+        text:
+    name:
+      name: Název
+      selector:
+        text:
+    category:
+      name: Kategorie
+      selector:
+        select:
+          options:
+            - groceries
+            - drugstore
+            - pharmacy
+            - diy
+            - electronics
+            - sport
+            - fashion
+            - fastfood
+            - other
+    tile_color:
+      name: Barva dlaždice
+      selector:
+        color_rgb:
+
+delete_store:
+  name: Smazat obchod
+  description: Smaže obchod a všechny jeho karty.
+  fields:
+    store_id:
+      name: ID obchodu
+      required: true
+      selector:
+        text:
+
+add_card:
+  name: Přidat kartu
+  description: Přidá věrnostní kartu k obchodu.
+  fields:
+    store_id:
+      name: ID obchodu
+      required: true
+      selector:
+        text:
+    name:
+      name: Název karty
+      required: true
+      example: "Moje karta"
+      selector:
+        text:
+    barcode:
+      name: Čárový kód
+      description: Hodnota čárového nebo QR kódu
+      required: true
+      selector:
+        text:
+    barcode_type:
+      name: Typ kódu
+      default: EAN_13
+      selector:
+        select:
+          options:
+            - EAN_13
+            - EAN_8
+            - UPC_A
+            - UPC_E
+            - CODE_128
+            - CODE_39
+            - ITF
+            - QR_CODE
+            - DATA_MATRIX
+            - PDF_417
+            - AZTEC
+    notes:
+      name: Poznámka
+      selector:
+        text:
+          multiline: true
+
+update_card:
+  name: Aktualizovat kartu
+  description: Aktualizuje věrnostní kartu.
+  fields:
+    card_id:
+      name: ID karty
+      required: true
+      selector:
+        text:
+    name:
+      name: Název karty
+      selector:
+        text:
+    barcode:
+      name: Čárový kód
+      selector:
+        text:
+    barcode_type:
+      name: Typ kódu
+      selector:
+        select:
+          options:
+            - EAN_13
+            - EAN_8
+            - UPC_A
+            - UPC_E
+            - CODE_128
+            - CODE_39
+            - ITF
+            - QR_CODE
+            - DATA_MATRIX
+            - PDF_417
+            - AZTEC
+    notes:
+      name: Poznámka
+      selector:
+        text:
+          multiline: true
+
+delete_card:
+  name: Smazat kartu
+  fields:
+    card_id:
+      name: ID karty
+      required: true
+      selector:
+        text:
+
+add_location:
+  name: Přidat lokaci obchodu
+  description: Přidá GPS lokaci k obchodu pro detekci blízkosti.
+  fields:
+    store_id:
+      name: ID obchodu
+      required: true
+      selector:
+        text:
+    lat:
+      name: Zeměpisná šířka
+      required: true
+      selector:
+        number:
+          min: -90
+          max: 90
+          step: 0.000001
+    lon:
+      name: Zeměpisná délka
+      required: true
+      selector:
+        number:
+          min: -180
+          max: 180
+          step: 0.000001
+    radius_m:
+      name: Poloměr (metry)
+      default: 300
+      selector:
+        number:
+          min: 50
+          max: 5000
+          unit_of_measurement: m
+    label:
+      name: Označení
+      description: Název pobočky nebo lokace
+      example: "OC Palladium"
+      selector:
+        text:
+
+delete_location:
+  name: Smazat lokaci
+  fields:
+    store_id:
+      name: ID obchodu
+      required: true
+      selector:
+        text:
+    location_index:
+      name: Index lokace
+      description: Pořadí lokace v seznamu (od 0)
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+
+download_logo:
+  name: Stáhnout logo
+  description: Stáhne logo obchodu z URL a uloží ho lokálně.
+  fields:
+    store_id:
+      name: ID obchodu
+      required: true
+      selector:
+        text:
+    url:
+      name: URL loga
+      required: true
+      example: "https://example.com/logo.png"
+      selector:
+        text:
+
+upload_logo:
+  name: Nahrát logo
+  description: Uloží logo ze souboru (base64 data URL).
+  fields:
+    store_id:
+      name: ID obchodu
+      required: true
+      selector:
+        text:
+    data_url:
+      name: Data URL
+      description: "Base64 data URL obrázku (data:image/png;base64,...)"
+      required: true
+      selector:
+        text:
+
+delete_logo:
+  name: Smazat logo
+  fields:
+    store_id:
+      name: ID obchodu
+      required: true
+      selector:
+        text:
+
+update_settings:
+  name: Aktualizovat nastavení
+  fields:
+    global_proximity_m:
+      name: Globální vzdálenost (m)
+      selector:
+        number:
+          min: 50
+          max: 10000
+          unit_of_measurement: m
+    notifications_enabled:
+      name: Notifikace zapnuty
+      selector:
+        boolean:
+    notification_dwell_minutes:
+      name: Doba setrvání pro notifikaci (min)
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: min
+    device_trackers:
+      name: Device trackery
+      selector:
+        entity:
+          multiple: true
+          domain: device_tracker

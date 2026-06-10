@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Věrnostní karty – nastavení",
+        "description": "Nastavte parametry integrace věrnostních karet.",
+        "data": {
+          "device_trackers": "Sledovače polohy (telefony)",
+          "global_proximity_m": "Vzdálenost pro detekci \"poblíž\" (metry)",
+          "notifications_enabled": "Zapnout notifikace při příchodu do obchodu",
+          "notification_dwell_minutes": "Minimální doba v lokalitě před notifikací (minuty)"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Integrace věrnostních karet je již nainstalována."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Nastavení věrnostních karet",
+        "data": {
+          "device_trackers": "Sledovače polohy (telefony)",
+          "global_proximity_m": "Vzdálenost pro detekci \"poblíž\" (metry)",
+          "notifications_enabled": "Zapnout notifikace",
+          "notification_dwell_minutes": "Minimální doba v lokalitě (minuty)"
+        }
+      }
+    }
+  }
+}
