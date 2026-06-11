@@ -145,7 +145,18 @@ const STYLES = `
                    background: rgba(0,0,0,.2); }
   .tile-name { font-size: 0.78em; font-weight: 600; text-align: center; color: #fff;
                text-shadow: 0 1px 2px rgba(0,0,0,.4); line-height: 1.2; }
-  .tile-badge { font-size: 0.68em; color: rgba(255,255,255,.8); }
+  .tile-badge { position:absolute; bottom:6px; right:8px; background:rgba(0,0,0,.35); color:#fff;
+                border-radius:10px; font-size:0.72em; font-weight:700; padding:1px 6px;
+                min-width:20px; text-align:center; line-height:18px; pointer-events:none; }
+  .loc-actions { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  .loc-addr-row { display:flex; gap:8px; align-items:center; margin-bottom:4px; }
+  .loc-addr-row input { flex:1; min-width:0; }
+  .loc-addr-results { border:1px solid var(--divider-color,#ccc); border-radius:6px; max-height:160px;
+                      overflow-y:auto; margin-bottom:8px; background:var(--card-background-color,#fff); }
+  .loc-result-item { padding:8px 10px; cursor:pointer; font-size:0.82em;
+                     border-bottom:1px solid var(--divider-color,#eee); color:var(--primary-text-color); }
+  .loc-result-item:last-child { border-bottom:none; }
+  .loc-result-item:hover { background:var(--secondary-background-color,#f5f5f5); }
   .fab { position: absolute; bottom: 16px; right: 16px; width: 48px; height: 48px; border-radius: 50%;
          background: var(--primary-color, #1976d2); color: #fff; border: none; font-size: 1.8em;
          cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -474,7 +485,7 @@ class LoyaltyCardsCard extends HTMLElement {
     if (cardCount > 0) {
       tile.appendChild(Object.assign(document.createElement("div"), {
         className: "tile-badge",
-        textContent: `${cardCount} kart${cardCount === 1 ? "a" : cardCount < 5 ? "y" : ""}`,
+        textContent: String(cardCount),
       }));
     }
 
@@ -584,6 +595,9 @@ class LoyaltyCardsCard extends HTMLElement {
           textContent: card.notes,
         }));
       }
+      wrap.style.cursor = "pointer";
+      wrap.title = "Kliknutím zobrazíte na celé obrazovce";
+      wrap.addEventListener("click", () => this._openFullscreen(card));
     }
     frag.appendChild(wrap);
 
@@ -592,7 +606,6 @@ class LoyaltyCardsCard extends HTMLElement {
     [
       ["+ Přidat kartu", "btn-secondary", () => this._openModal({ type: "add_card", store })],
       ["Nastavení", "btn-secondary", () => this._openModal({ type: "edit_store", store })],
-      ["Celá obrazovka", "btn-primary", () => card && this._openFullscreen(card)],
     ].forEach(([text, cls, handler]) => {
       const b = document.createElement("button");
       b.className = `btn ${cls}`;
@@ -896,10 +909,78 @@ class LoyaltyCardsCard extends HTMLElement {
     });
     frag.appendChild(locList);
 
+    // Location quick-fill buttons
+    const locActions = document.createElement("div");
+    locActions.className = "loc-actions";
+
+    const gpsBtn = document.createElement("button");
+    gpsBtn.className = "btn btn-secondary";
+    gpsBtn.textContent = "📍 Moje poloha";
+    gpsBtn.addEventListener("click", () => {
+      if (!navigator.geolocation) { alert("Geolokace není v tomto prohlížeči dostupná."); return; }
+      gpsBtn.textContent = "Načítám…";
+      gpsBtn.disabled = true;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const la = this.shadowRoot.getElementById("loc-lat");
+          const lo = this.shadowRoot.getElementById("loc-lon");
+          if (la) la.value = pos.coords.latitude.toFixed(6);
+          if (lo) lo.value = pos.coords.longitude.toFixed(6);
+          gpsBtn.textContent = "📍 Moje poloha";
+          gpsBtn.disabled = false;
+        },
+        () => {
+          alert("Nepodařilo se získat polohu. Zkontrolujte povolení prohlížeče.");
+          gpsBtn.textContent = "📍 Moje poloha";
+          gpsBtn.disabled = false;
+        },
+        { timeout: 10000, enableHighAccuracy: true }
+      );
+    });
+    locActions.appendChild(gpsBtn);
+
+    const configuredTrackers = this._data?.settings?.device_trackers || [];
+    if (configuredTrackers.length > 0) {
+      const trackerBtn = document.createElement("button");
+      trackerBtn.className = "btn btn-secondary";
+      trackerBtn.textContent = "📡 Poloha trackeru";
+      trackerBtn.addEventListener("click", () => {
+        for (const t of configuredTrackers) {
+          const st = this._hass.states[t];
+          if (st?.attributes?.latitude) {
+            const la = this.shadowRoot.getElementById("loc-lat");
+            const lo = this.shadowRoot.getElementById("loc-lon");
+            if (la) la.value = st.attributes.latitude.toFixed(6);
+            if (lo) lo.value = st.attributes.longitude.toFixed(6);
+            return;
+          }
+        }
+        alert("Tracker zatím nemá dostupnou polohu GPS.");
+      });
+      locActions.appendChild(trackerBtn);
+    }
+    frag.appendChild(locActions);
+
+    // Address search
+    const addrRow = document.createElement("div");
+    addrRow.className = "loc-addr-row form-group";
+    addrRow.innerHTML = `
+      <input type="text" id="loc-addr" placeholder="Hledat adresu, město, PSČ…" />
+      <button class="btn btn-secondary" id="loc-search-btn" style="white-space:nowrap;flex-shrink:0;">Hledat</button>`;
+    frag.appendChild(addrRow);
+
+    const addrResults = document.createElement("div");
+    addrResults.id = "loc-addr-results";
+    addrResults.className = "loc-addr-results";
+    addrResults.style.display = "none";
+    frag.appendChild(addrResults);
+
+    // Coordinates (filled automatically, still editable)
     const addLocDiv = document.createElement("div");
     addLocDiv.className = "form-group";
     addLocDiv.innerHTML = `
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+      <label>Souřadnice a poloměr</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <input type="number" id="loc-lat" placeholder="Šířka" step="0.000001" style="flex:1;min-width:80px;" />
         <input type="number" id="loc-lon" placeholder="Délka" step="0.000001" style="flex:1;min-width:80px;" />
         <input type="number" id="loc-radius" placeholder="Poloměr (m)" value="300" style="flex:1;min-width:80px;" />
@@ -907,24 +988,15 @@ class LoyaltyCardsCard extends HTMLElement {
       </div>`;
     frag.appendChild(addLocDiv);
 
-    const useGpsBtn = document.createElement("button");
-    useGpsBtn.className = "btn btn-secondary";
-    useGpsBtn.style.marginBottom = "8px";
-    useGpsBtn.textContent = "Použít polohu trackeru";
-    useGpsBtn.addEventListener("click", () => {
-      const trackers = this._data?.settings?.device_trackers || [];
-      for (const t of trackers) {
-        const st = this._hass.states[t];
-        if (st?.attributes?.latitude) {
-          const la = this.shadowRoot.getElementById("loc-lat");
-          const lo = this.shadowRoot.getElementById("loc-lon");
-          if (la) la.value = st.attributes.latitude.toFixed(6);
-          if (lo) lo.value = st.attributes.longitude.toFixed(6);
-          break;
-        }
+    setTimeout(() => {
+      const searchBtn = this.shadowRoot.getElementById("loc-search-btn");
+      const addrInp = this.shadowRoot.getElementById("loc-addr");
+      if (searchBtn && addrInp) {
+        const doSearch = () => this._geocodeAddress(addrInp.value.trim());
+        searchBtn.addEventListener("click", doSearch);
+        addrInp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); } });
       }
-    });
-    frag.appendChild(useGpsBtn);
+    }, 50);
 
     // Cards list
     frag.appendChild(Object.assign(document.createElement("div"), {
@@ -1012,6 +1084,48 @@ class LoyaltyCardsCard extends HTMLElement {
     this._closeModal();
   }
 
+  async _geocodeAddress(query) {
+    if (!query) return;
+    const resultsEl = this.shadowRoot.getElementById("loc-addr-results");
+    const searchBtn = this.shadowRoot.getElementById("loc-search-btn");
+    if (searchBtn) { searchBtn.textContent = "Hledám…"; searchBtn.disabled = true; }
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=0`;
+      const resp = await fetch(url, { headers: { "Accept-Language": "cs,en" } });
+      const results = await resp.json();
+      if (!resultsEl) return;
+      if (results.length === 0) {
+        resultsEl.innerHTML = `<div class="loc-result-item" style="color:var(--secondary-text-color);">Adresa nenalezena.</div>`;
+        resultsEl.style.display = "block";
+        return;
+      }
+      resultsEl.innerHTML = "";
+      for (const r of results) {
+        const item = document.createElement("div");
+        item.className = "loc-result-item";
+        item.textContent = r.display_name;
+        item.addEventListener("click", () => {
+          const la = this.shadowRoot.getElementById("loc-lat");
+          const lo = this.shadowRoot.getElementById("loc-lon");
+          if (la) la.value = parseFloat(r.lat).toFixed(6);
+          if (lo) lo.value = parseFloat(r.lon).toFixed(6);
+          resultsEl.style.display = "none";
+          const addrInp = this.shadowRoot.getElementById("loc-addr");
+          if (addrInp) addrInp.value = r.display_name.split(",")[0];
+        });
+        resultsEl.appendChild(item);
+      }
+      resultsEl.style.display = "block";
+    } catch {
+      if (resultsEl) {
+        resultsEl.innerHTML = `<div class="loc-result-item" style="color:var(--error-color,#c00);">Chyba při vyhledávání.</div>`;
+        resultsEl.style.display = "block";
+      }
+    } finally {
+      if (searchBtn) { searchBtn.textContent = "Hledat"; searchBtn.disabled = false; }
+    }
+  }
+
   async _uploadLogoFile(storeId, file) {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -1040,31 +1154,14 @@ class LoyaltyCardsCard extends HTMLElement {
     frag.appendChild(this._makeField("Číslo / kód", `
       <input type="text" id="card-barcode" placeholder="Zadejte nebo naskenujte" value="${prefill.barcode || ""}" />`));
 
-    // Scan buttons
+    // Scan via camera
     const scanRow = document.createElement("div");
     scanRow.className = "scan-row";
-
     const camBtn = document.createElement("button");
     camBtn.className = "scan-btn";
-    camBtn.textContent = "📷 Kamera";
+    camBtn.textContent = "📷 Naskenovat kamerou";
     camBtn.addEventListener("click", () => this._startLiveScanner(store));
     scanRow.appendChild(camBtn);
-
-    const fileLabel = document.createElement("label");
-    fileLabel.className = "scan-btn";
-    fileLabel.htmlFor = "scan-file-input";
-    fileLabel.textContent = "🖼 Z obrázku";
-    scanRow.appendChild(fileLabel);
-
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.id = "scan-file-input";
-    fileInput.accept = "image/*";
-    fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (file) await this._scanFromFile(file);
-    });
-    scanRow.appendChild(fileInput);
     frag.appendChild(scanRow);
 
     // Barcode type select
@@ -1233,9 +1330,54 @@ class LoyaltyCardsCard extends HTMLElement {
       <div class="card-root"><div class="empty" style="padding:32px;">${msg}</div></div>`;
   }
 
+  static getConfigElement() {
+    return document.createElement("loyalty-cards-card-editor");
+  }
+
   static getStubConfig() { return {}; }
 }
 
+// ── Card editor (visual config in Lovelace UI) ───────────────────────────────
+class LoyaltyCardsCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = {};
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    this._render();
+  }
+
+  _render() {
+    const layout = this._config.layout || "";
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display:block; }
+        .row { margin-bottom:14px; }
+        label { display:block; font-size:.82em; color:var(--secondary-text-color,#555); margin-bottom:4px; }
+        select { width:100%; padding:8px 10px; border-radius:6px; border:1px solid var(--divider-color,#ccc);
+                 background:var(--card-background-color,#fff); color:var(--primary-text-color,#333); font-size:.9em; }
+      </style>
+      <div class="row">
+        <label>Rozložení karet</label>
+        <select id="layout-select">
+          <option value="" ${!layout ? "selected" : ""}>Záložky (Vše / Poblíž / Kategorie)</option>
+          <option value="flat" ${layout === "flat" ? "selected" : ""}>Ploché (skupiny dle kategorie)</option>
+        </select>
+      </div>`;
+    this.shadowRoot.getElementById("layout-select").addEventListener("change", (e) => {
+      const cfg = { ...this._config };
+      if (e.target.value) cfg.layout = e.target.value; else delete cfg.layout;
+      this.dispatchEvent(new CustomEvent("config-changed", {
+        detail: { config: cfg }, bubbles: true, composed: true,
+      }));
+    });
+  }
+}
+
+customElements.define("loyalty-cards-card-editor", LoyaltyCardsCardEditor);
 customElements.define("loyalty-cards-card", LoyaltyCardsCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
