@@ -60,7 +60,6 @@ const CATEGORY_LABELS = {
   other: "Ostatní",
 };
 
-// Haversine distance in metres
 function distanceM(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -81,24 +80,59 @@ function initials(name) {
     .join("");
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
+async function dominantColor(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = 32;
+        c.height = 32;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, 32, 32);
+        const d = ctx.getImageData(0, 0, 32, 32).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] > 128) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+        }
+        resolve(n > 0
+          ? "#" + [r, g, b].map(v => Math.round(v / n).toString(16).padStart(2, "0")).join("")
+          : null);
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+// ── Styles ───────────────────────────────────────────────────────────────────
 const STYLES = `
   :host { display: block; font-family: var(--paper-font-body1_-_font-family, sans-serif); }
   .card-root { background: var(--card-background-color, #fff); border-radius: 12px; overflow: hidden; }
   .header { padding: 16px 16px 0; display: flex; justify-content: space-between; align-items: center; }
   .header h2 { margin: 0; font-size: 1.1em; font-weight: 600; color: var(--primary-text-color); }
-  .tabs { display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--divider-color, #e0e0e0); overflow-x: auto; }
+  .tabs { display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--divider-color,#e0e0e0);
+          overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
   .tab { padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 0.85em; white-space: nowrap;
          color: var(--secondary-text-color); border: none; background: none; }
   .tab.active { background: var(--primary-color, #1976d2); color: #fff; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 12px 16px 16px; }
   @media (min-width: 600px) { .grid { grid-template-columns: repeat(3, 1fr); } }
   @media (min-width: 900px) { .grid { grid-template-columns: repeat(4, 1fr); } }
-  .tile { border-radius: 10px; cursor: pointer; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s;
-           display: flex; flex-direction: column; align-items: center; padding: 14px 8px 10px; gap: 8px;
-           box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .tile { border-radius: 10px; cursor: pointer; overflow: hidden; position: relative;
+          transition: transform .15s, box-shadow .15s;
+          display: flex; flex-direction: column; align-items: center; padding: 14px 8px 10px; gap: 8px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.12); }
   .tile:hover { transform: scale(1.03); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
-  .tile-logo { width: 56px; height: 56px; border-radius: 8px; object-fit: contain; background: rgba(255,255,255,.25); }
+  .tile-menu { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.28); color: #fff;
+               border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer;
+               font-size: 1.1em; line-height: 1; padding: 0;
+               display: flex; align-items: center; justify-content: center; z-index: 1; }
+  .tile-menu:hover { background: rgba(0,0,0,.55); }
+  .tile-logo { width: 56px; height: 56px; border-radius: 8px; object-fit: contain;
+               background: rgba(255,255,255,.25); }
   .tile-initials { width: 56px; height: 56px; border-radius: 8px; display: flex; align-items: center;
                    justify-content: center; font-size: 1.4em; font-weight: 700; color: #fff;
                    background: rgba(0,0,0,.2); }
@@ -108,11 +142,13 @@ const STYLES = `
   .fab { position: absolute; bottom: 16px; right: 16px; width: 48px; height: 48px; border-radius: 50%;
          background: var(--primary-color, #1976d2); color: #fff; border: none; font-size: 1.8em;
          cursor: pointer; display: flex; align-items: center; justify-content: center;
-         box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+         box-shadow: 0 4px 12px rgba(0,0,0,.3); z-index: 1; }
   .grid-wrap { position: relative; min-height: 80px; }
   .empty { padding: 24px; text-align: center; color: var(--secondary-text-color); font-size: 0.9em; }
+  .category-header { font-weight: 600; font-size: 0.82em; color: var(--secondary-text-color);
+                     padding: 12px 16px 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-  /* ── Modal overlay ── */
+  /* Modal */
   .modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.6);
                    display: flex; align-items: flex-end; justify-content: center; }
   @media (min-width: 600px) { .modal-overlay { align-items: center; } }
@@ -124,18 +160,17 @@ const STYLES = `
   .close-btn { background: none; border: none; font-size: 1.4em; cursor: pointer;
                color: var(--secondary-text-color); line-height: 1; }
 
-  /* ── Barcode display ── */
+  /* Barcode */
   .barcode-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 0; }
   .barcode-wrap svg, .barcode-wrap canvas { max-width: 100%; }
   .barcode-value { font-size: 0.85em; color: var(--secondary-text-color); letter-spacing: 1px; }
   .card-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
   .card-tab { padding: 4px 12px; border-radius: 16px; cursor: pointer; font-size: 0.8em;
-              border: 1px solid var(--divider-color, #e0e0e0); background: none; }
+              border: 1px solid var(--divider-color, #e0e0e0); background: none;
+              color: var(--primary-text-color); }
   .card-tab.active { background: var(--primary-color, #1976d2); color: #fff; border-color: transparent; }
-  .fullscreen-btn { background: var(--primary-color, #1976d2); color: #fff; border: none; border-radius: 8px;
-                    padding: 10px 20px; cursor: pointer; font-size: 0.9em; }
 
-  /* ── Add / edit forms ── */
+  /* Forms */
   .form-group { margin-bottom: 14px; }
   label { display: block; font-size: 0.82em; color: var(--secondary-text-color); margin-bottom: 4px; }
   input[type=text], input[type=number], select, textarea {
@@ -143,25 +178,32 @@ const STYLES = `
     border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff);
     color: var(--primary-text-color); font-size: 0.9em; }
   .color-row { display: flex; gap: 8px; align-items: center; }
-  input[type=color] { width: 40px; height: 36px; padding: 2px; border-radius: 6px; border: 1px solid var(--divider-color,#ccc); }
-  .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  input[type=color] { width: 40px; height: 36px; padding: 2px; border-radius: 6px;
+                      border: 1px solid var(--divider-color,#ccc); cursor: pointer; }
+  .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
   .btn { padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.9em; }
   .btn-primary { background: var(--primary-color, #1976d2); color: #fff; }
   .btn-danger { background: #d32f2f; color: #fff; }
-  .btn-secondary { background: var(--secondary-background-color, #f5f5f5); color: var(--primary-text-color); }
-  .scan-btn { width: 100%; padding: 12px; background: var(--secondary-background-color,#f0f0f0);
-              border: 2px dashed var(--divider-color,#ccc); border-radius: 8px; cursor: pointer; font-size: 0.9em; }
-  #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-top: 8px; }
-  .logo-section { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .logo-preview { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; border: 1px solid var(--divider-color,#ccc); }
+  .btn-secondary { background: var(--secondary-background-color, #f5f5f5); color: var(--primary-text-color);
+                   border: 1px solid var(--divider-color,#e0e0e0); }
+  .logo-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .logo-preview { width: 48px; height: 48px; object-fit: contain; border-radius: 6px;
+                  border: 1px solid var(--divider-color,#ccc); }
   .section-title { font-weight: 600; color: var(--primary-text-color); margin: 16px 0 8px; font-size: 0.9em; }
-  .store-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .suggestion-chip { padding: 4px 10px; border-radius: 14px; background: var(--secondary-background-color,#f0f0f0);
-                     cursor: pointer; font-size: 0.8em; border: none; }
-  .location-list { list-style: none; padding: 0; margin: 0; }
+  .location-list { list-style: none; padding: 0; margin: 0 0 8px; }
   .location-item { display: flex; justify-content: space-between; align-items: center;
                    padding: 6px 0; border-bottom: 1px solid var(--divider-color,#e0e0e0); font-size: 0.85em; }
-  .nearby-badge { font-size: 0.7em; background: #43a047; color: #fff; border-radius: 10px; padding: 2px 7px; }
+  .file-label { display: inline-block; padding: 8px 14px; background: var(--secondary-background-color,#f0f0f0);
+                border: 1px solid var(--divider-color,#ccc); border-radius: 6px; cursor: pointer;
+                font-size: 0.85em; color: var(--primary-text-color); }
+  .file-label:hover { background: var(--divider-color,#e0e0e0); }
+  input[type=file] { display: none; }
+  .hint { font-size: 0.78em; color: var(--secondary-text-color); margin-top: 4px; display: block; }
+  .scan-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .scan-btn { flex: 1; min-width: 120px; padding: 10px; background: var(--secondary-background-color,#f0f0f0);
+              border: 2px dashed var(--divider-color,#ccc); border-radius: 8px; cursor: pointer;
+              font-size: 0.85em; color: var(--primary-text-color); text-align: center; }
+  .custom-fields { margin-top: 10px; }
 `;
 
 // ── Main custom element ──────────────────────────────────────────────────────
@@ -172,10 +214,9 @@ class LoyaltyCardsCard extends HTMLElement {
     this._data = null;
     this._hass = null;
     this._activeTab = "all";
-    this._activeCategory = null;
-    this._modal = null; // { type: 'barcode'|'add_store'|'add_card'|'edit_store'|'scan', payload }
+    this._modal = null;
     this._scanner = null;
-    this._unsubscribe = null;
+    this._unsubscribeBus = null;
     this._nearbyStoreIds = new Set();
     this._proximityTimer = {};
     this._notificationSent = new Set();
@@ -198,7 +239,7 @@ class LoyaltyCardsCard extends HTMLElement {
 
   disconnectedCallback() {
     this._unsubscribeBus?.();
-    this._stopScanner();
+    this._stopLiveScanner();
   }
 
   _subscribe() {
@@ -212,23 +253,24 @@ class LoyaltyCardsCard extends HTMLElement {
   async _loadData() {
     if (!this._hass) return;
     try {
-      const result = await this._hass.callWS({ type: "loyalty_cards/get_data" });
-      this._data = result;
+      this._data = await this._hass.callWS({ type: "loyalty_cards/get_data" });
       this._updateNearby();
       this._render();
       if (!this._unsubscribeBus) this._subscribe();
-    } catch (e) {
-      this._data = null;
+    } catch {
       this._renderError("Nepodařilo se načíst data. Je integrace Věrnostní karty nainstalována?");
     }
   }
 
   _updateNearby() {
     if (!this._hass || !this._data) return;
-    const settings = this._data.settings || {};
-    const trackers = settings.device_trackers || [];
-    const globalR = settings.global_proximity_m ?? 300;
-    const stores = this._data.stores || [];
+    const { settings = {}, stores = [] } = this._data;
+    const {
+      device_trackers: trackers = [],
+      global_proximity_m: globalR = 300,
+      notifications_enabled: notifOn = false,
+      notification_dwell_minutes: dwellMin = 7,
+    } = settings;
 
     let userLat = null, userLon = null;
     for (const t of trackers) {
@@ -244,41 +286,40 @@ class LoyaltyCardsCard extends HTMLElement {
     if (userLat !== null) {
       for (const store of stores) {
         for (const loc of store.locations || []) {
-          const d = distanceM(userLat, userLon, loc.lat, loc.lon);
-          const r = Math.max(loc.radius_m ?? globalR, globalR);
-          if (d <= r) {
+          if (distanceM(userLat, userLon, loc.lat, loc.lon) <= Math.max(loc.radius_m ?? globalR, globalR)) {
             nearby.add(store.id);
-            this._handleNearbyNotification(store, settings);
+            if (notifOn) this._handleNotification(store, dwellMin);
           }
+        }
+      }
+      for (const id of Object.keys(this._proximityTimer)) {
+        if (!nearby.has(id)) {
+          clearTimeout(this._proximityTimer[id]);
+          delete this._proximityTimer[id];
         }
       }
     }
     this._nearbyStoreIds = nearby;
   }
 
-  _handleNearbyNotification(store, settings) {
-    if (!settings.notifications_enabled) return;
-    if (this._notificationSent.has(store.id)) return;
-    const dwellMs = (settings.notification_dwell_minutes ?? 7) * 60 * 1000;
-    if (!this._proximityTimer[store.id]) {
-      this._proximityTimer[store.id] = setTimeout(() => {
-        if (this._nearbyStoreIds.has(store.id) && !this._notificationSent.has(store.id)) {
-          this._notificationSent.add(store.id);
-          this._hass?.callService("notify", "persistent_notification", {
-            title: "Věrnostní karta",
-            message: `Jste u obchodu ${store.name}. Nezapomeňte na věrnostní kartu!`,
-          }).catch(() => {});
-        }
-        delete this._proximityTimer[store.id];
-      }, dwellMs);
-    }
+  _handleNotification(store, dwellMin) {
+    if (this._notificationSent.has(store.id) || this._proximityTimer[store.id]) return;
+    this._proximityTimer[store.id] = setTimeout(() => {
+      delete this._proximityTimer[store.id];
+      if (this._nearbyStoreIds.has(store.id) && !this._notificationSent.has(store.id)) {
+        this._notificationSent.add(store.id);
+        this._hass?.callService("notify", "persistent_notification", {
+          title: "Věrnostní karta",
+          message: `Jste u obchodu ${store.name}. Nezapomeňte na věrnostní kartu!`,
+        }).catch(() => {});
+      }
+    }, dwellMin * 60000);
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   _render() {
     const root = this.shadowRoot;
     root.innerHTML = "";
-
     const style = document.createElement("style");
     style.textContent = STYLES;
     root.appendChild(style);
@@ -288,16 +329,18 @@ class LoyaltyCardsCard extends HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "card-root";
 
-    const header = document.createElement("div");
-    header.className = "header";
-    header.innerHTML = `<h2>Věrnostní karty</h2>`;
-    wrap.appendChild(header);
+    wrap.appendChild(Object.assign(document.createElement("div"), {
+      className: "header",
+      innerHTML: `<h2>Věrnostní karty</h2>`,
+    }));
 
-    wrap.appendChild(this._buildTabs());
+    const isFlat = this._config?.layout === "flat";
+
+    if (!isFlat) wrap.appendChild(this._buildTabs());
 
     const gridWrap = document.createElement("div");
     gridWrap.className = "grid-wrap";
-    gridWrap.appendChild(this._buildGrid());
+    gridWrap.appendChild(isFlat ? this._buildFlatContent() : this._buildGrid());
 
     const fab = document.createElement("button");
     fab.className = "fab";
@@ -309,64 +352,79 @@ class LoyaltyCardsCard extends HTMLElement {
     wrap.appendChild(gridWrap);
     root.appendChild(wrap);
 
-    if (this._modal) {
-      root.appendChild(this._buildModal());
-    }
+    if (this._modal) root.appendChild(this._buildModalOverlay());
   }
 
   _buildTabs() {
     const tabs = document.createElement("div");
     tabs.className = "tabs";
-
-    const tabDefs = [
+    const defs = [
       { key: "all", label: "Vše" },
-      { key: "nearby", label: `Poblíž ${this._nearbyStoreIds.size > 0 ? `(${this._nearbyStoreIds.size})` : ""}` },
+      { key: "nearby", label: `Poblíž${this._nearbyStoreIds.size > 0 ? ` (${this._nearbyStoreIds.size})` : ""}` },
       ...Object.entries(CATEGORY_LABELS).map(([k, v]) => ({ key: `cat:${k}`, label: v })),
     ];
-
-    for (const { key, label } of tabDefs) {
+    for (const { key, label } of defs) {
       const btn = document.createElement("button");
       btn.className = "tab" + (this._activeTab === key ? " active" : "");
       btn.textContent = label;
-      btn.addEventListener("click", () => {
-        this._activeTab = key;
-        this._render();
-      });
+      btn.addEventListener("click", () => { this._activeTab = key; this._render(); });
       tabs.appendChild(btn);
     }
     return tabs;
   }
 
-  _buildGrid() {
+  _filteredStores() {
     const stores = this._data.stores || [];
-    let filtered = stores;
+    if (this._activeTab === "nearby") return stores.filter(s => this._nearbyStoreIds.has(s.id));
+    if (this._activeTab.startsWith("cat:")) return stores.filter(s => s.category === this._activeTab.slice(4));
+    return stores;
+  }
 
-    if (this._activeTab === "nearby") {
-      filtered = stores.filter((s) => this._nearbyStoreIds.has(s.id));
-    } else if (this._activeTab.startsWith("cat:")) {
-      const cat = this._activeTab.slice(4);
-      filtered = stores.filter((s) => s.category === cat);
-    }
-
+  _buildGrid() {
+    const stores = this._filteredStores();
     const grid = document.createElement("div");
     grid.className = "grid";
-
-    if (filtered.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      empty.style.gridColumn = "1/-1";
-      empty.textContent =
-        this._activeTab === "nearby"
+    if (stores.length === 0) {
+      const empty = Object.assign(document.createElement("div"), {
+        className: "empty",
+        textContent: this._activeTab === "nearby"
           ? "Žádné obchody poblíž. Zkontrolujte nastavení polohování."
-          : "Žádné karty. Přidejte první kliknutím na +";
+          : "Žádné karty. Přidejte první kliknutím na +",
+      });
+      empty.style.gridColumn = "1/-1";
       grid.appendChild(empty);
-      return grid;
-    }
-
-    for (const store of filtered) {
-      grid.appendChild(this._buildTile(store));
+    } else {
+      for (const store of stores) grid.appendChild(this._buildTile(store));
     }
     return grid;
+  }
+
+  _buildFlatContent() {
+    const frag = document.createDocumentFragment();
+    const stores = this._data.stores || [];
+    if (stores.length === 0) {
+      frag.appendChild(Object.assign(document.createElement("div"), {
+        className: "empty",
+        textContent: "Žádné karty. Přidejte první kliknutím na +",
+      }));
+      return frag;
+    }
+    const byCategory = {};
+    for (const store of stores) {
+      const cat = store.category || "other";
+      (byCategory[cat] = byCategory[cat] || []).push(store);
+    }
+    for (const [cat, catStores] of Object.entries(byCategory)) {
+      frag.appendChild(Object.assign(document.createElement("div"), {
+        className: "category-header",
+        textContent: CATEGORY_LABELS[cat] || cat,
+      }));
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      for (const store of catStores) grid.appendChild(this._buildTile(store));
+      frag.appendChild(grid);
+    }
+    return frag;
   }
 
   _buildTile(store) {
@@ -374,117 +432,97 @@ class LoyaltyCardsCard extends HTMLElement {
     tile.className = "tile";
     tile.style.background = store.tile_color || "#1976d2";
 
+    const menuBtn = document.createElement("button");
+    menuBtn.className = "tile-menu";
+    menuBtn.title = "Nastavení obchodu";
+    menuBtn.textContent = "⋮";
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this._openModal({ type: "edit_store", store });
+    });
+    tile.appendChild(menuBtn);
+
     if (store.logo_path) {
       const img = document.createElement("img");
       img.className = "tile-logo";
       img.src = store.logo_path;
       img.alt = store.name;
-      img.onerror = () => {
-        img.replaceWith(this._buildInitials(store.name));
-      };
+      img.onerror = () => img.replaceWith(this._buildInitials(store.name));
       tile.appendChild(img);
     } else {
       tile.appendChild(this._buildInitials(store.name));
     }
 
-    const name = document.createElement("div");
-    name.className = "tile-name";
-    name.textContent = store.name;
-    tile.appendChild(name);
+    tile.appendChild(Object.assign(document.createElement("div"), {
+      className: "tile-name",
+      textContent: store.name,
+    }));
 
     const cardCount = (store.cards || []).length;
     if (cardCount > 0) {
-      const badge = document.createElement("div");
-      badge.className = "tile-badge";
-      badge.textContent = `${cardCount} kart${cardCount === 1 ? "a" : cardCount < 5 ? "y" : ""}`;
-      tile.appendChild(badge);
+      tile.appendChild(Object.assign(document.createElement("div"), {
+        className: "tile-badge",
+        textContent: `${cardCount} kart${cardCount === 1 ? "a" : cardCount < 5 ? "y" : ""}`,
+      }));
     }
 
     tile.addEventListener("click", () => {
-      if ((store.cards || []).length === 0) {
-        this._openModal({ type: "add_card", store });
-      } else {
-        this._openModal({ type: "barcode", store, cardIndex: 0 });
-      }
+      this._openModal(cardCount === 0
+        ? { type: "add_card", store }
+        : { type: "barcode", store, cardIndex: 0 });
     });
-
-    tile.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      this._openModal({ type: "edit_store", store });
-    });
-
     return tile;
   }
 
   _buildInitials(name) {
-    const el = document.createElement("div");
-    el.className = "tile-initials";
-    el.textContent = initials(name);
-    return el;
+    return Object.assign(document.createElement("div"), {
+      className: "tile-initials",
+      textContent: initials(name),
+    });
   }
 
   // ── Modal router ────────────────────────────────────────────────────────────
-  _openModal(modal) {
-    this._modal = modal;
-    this._render();
-  }
+  _openModal(modal) { this._modal = modal; this._render(); }
+  _closeModal() { this._modal = null; this._render(); }
 
-  _closeModal() {
-    this._modal = null;
-    this._stopScanner();
-    this._render();
-  }
-
-  _buildModal() {
+  _buildModalOverlay() {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) this._closeModal();
-    });
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) this._closeModal(); });
 
     const inner = document.createElement("div");
     inner.className = "modal";
-
     switch (this._modal.type) {
-      case "barcode": inner.appendChild(this._buildBarcodeModal()); break;
-      case "add_store": inner.appendChild(this._buildAddStoreModal()); break;
+      case "barcode":    inner.appendChild(this._buildBarcodeModal()); break;
+      case "add_store":  inner.appendChild(this._buildAddStoreModal()); break;
       case "edit_store": inner.appendChild(this._buildEditStoreModal()); break;
-      case "add_card": inner.appendChild(this._buildAddCardModal()); break;
-      case "scan": inner.appendChild(this._buildScanModal()); break;
+      case "add_card":   inner.appendChild(this._buildAddCardModal()); break;
     }
-
     overlay.appendChild(inner);
     return overlay;
   }
 
   // ── Barcode display modal ───────────────────────────────────────────────────
   _buildBarcodeModal() {
-    const { store, cardIndex } = this._modal;
+    const { store, cardIndex = 0 } = this._modal;
     const cards = store.cards || [];
-    const card = cards[cardIndex] || cards[0];
-
+    const card = cards[cardIndex] ?? cards[0];
     const frag = document.createDocumentFragment();
 
     const mh = document.createElement("div");
     mh.className = "modal-header";
-    mh.innerHTML = `
-      <span class="modal-title">${store.name}</span>
-      <button class="close-btn" title="Zavřít">✕</button>
-    `;
+    mh.innerHTML = `<span class="modal-title">${store.name}</span><button class="close-btn">✕</button>`;
     mh.querySelector(".close-btn").addEventListener("click", () => this._closeModal());
     frag.appendChild(mh);
 
     if (cards.length > 1) {
       const tabRow = document.createElement("div");
       tabRow.className = "card-tabs";
-      cards.forEach((c, i) => {
+      cards.forEach((_, i) => {
         const t = document.createElement("button");
         t.className = "card-tab" + (i === cardIndex ? " active" : "");
-        t.textContent = c.name;
-        t.addEventListener("click", () => {
-          this._modal.cardIndex = i;
-          this._render();
-        });
+        t.textContent = `Karta ${i + 1}`;
+        t.addEventListener("click", () => { this._modal.cardIndex = i; this._render(); });
         tabRow.appendChild(t);
       });
       frag.appendChild(tabRow);
@@ -492,7 +530,6 @@ class LoyaltyCardsCard extends HTMLElement {
 
     const wrap = document.createElement("div");
     wrap.className = "barcode-wrap";
-
     if (card) {
       if (card.barcode_type === "QR_CODE") {
         const qrCanvas = document.createElement("canvas");
@@ -505,56 +542,48 @@ class LoyaltyCardsCard extends HTMLElement {
       } else {
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.id = "barcode-svg";
-        svg.style.maxWidth = "100%";
         wrap.appendChild(svg);
         setTimeout(() => {
-          const svgEl = this.shadowRoot.getElementById("barcode-svg");
-          if (svgEl) {
+          const el = this.shadowRoot.getElementById("barcode-svg");
+          if (el) {
             try {
-              JsBarcode(svgEl, card.barcode, {
+              JsBarcode(el, card.barcode, {
                 format: card.barcode_type?.replace("_", "") || "CODE128",
-                lineColor: "#000",
-                background: "#fff",
-                displayValue: true,
-                fontSize: 14,
-                margin: 10,
+                lineColor: "#000", background: "#fff",
+                displayValue: true, fontSize: 14, margin: 10,
               });
             } catch (e) {
-              svgEl.outerHTML = `<p style="color:red;font-size:.8em">Nelze zobrazit čárový kód: ${e.message}</p>`;
+              el.outerHTML = `<p style="color:red;font-size:.8em">Nelze zobrazit: ${e.message}</p>`;
             }
           }
         }, 50);
       }
-
-      const val = document.createElement("div");
-      val.className = "barcode-value";
-      val.textContent = card.barcode;
-      wrap.appendChild(val);
+      wrap.appendChild(Object.assign(document.createElement("div"), {
+        className: "barcode-value",
+        textContent: card.barcode,
+      }));
+      if (card.notes) {
+        wrap.appendChild(Object.assign(document.createElement("div"), {
+          style: { cssText: "font-size:.82em;color:var(--secondary-text-color);text-align:center;" },
+          textContent: card.notes,
+        }));
+      }
     }
-
     frag.appendChild(wrap);
 
     const btnRow = document.createElement("div");
     btnRow.className = "btn-row";
-
-    const addCardBtn = document.createElement("button");
-    addCardBtn.className = "btn btn-secondary";
-    addCardBtn.textContent = "+ Přidat kartu";
-    addCardBtn.addEventListener("click", () => this._openModal({ type: "add_card", store }));
-    btnRow.appendChild(addCardBtn);
-
-    const editBtn = document.createElement("button");
-    editBtn.className = "btn btn-secondary";
-    editBtn.textContent = "Nastavení obchodu";
-    editBtn.addEventListener("click", () => this._openModal({ type: "edit_store", store }));
-    btnRow.appendChild(editBtn);
-
-    const fsBtn = document.createElement("button");
-    fsBtn.className = "btn btn-primary fullscreen-btn";
-    fsBtn.textContent = "Celá obrazovka";
-    fsBtn.addEventListener("click", () => this._openFullscreen(card));
-    btnRow.appendChild(fsBtn);
-
+    [
+      ["+ Přidat kartu", "btn-secondary", () => this._openModal({ type: "add_card", store })],
+      ["Nastavení", "btn-secondary", () => this._openModal({ type: "edit_store", store })],
+      ["Celá obrazovka", "btn-primary", () => card && this._openFullscreen(card)],
+    ].forEach(([text, cls, handler]) => {
+      const b = document.createElement("button");
+      b.className = `btn ${cls}`;
+      b.textContent = text;
+      b.addEventListener("click", handler);
+      btnRow.appendChild(b);
+    });
     frag.appendChild(btnRow);
     return frag;
   }
@@ -571,14 +600,14 @@ class LoyaltyCardsCard extends HTMLElement {
     close.textContent = "✕";
     close.addEventListener("click", () => {
       document.body.removeChild(fs);
-      if (screen.orientation?.unlock) screen.orientation.unlock().catch(() => {});
+      screen.orientation?.unlock?.()?.catch?.(() => {});
     });
     fs.appendChild(close);
 
     if (card.barcode_type === "QR_CODE") {
-      const qrCanvas = document.createElement("canvas");
-      fs.appendChild(qrCanvas);
-      QRCode.toCanvas(qrCanvas, card.barcode, { width: 260, margin: 2 }).catch(() => {});
+      const c = document.createElement("canvas");
+      fs.appendChild(c);
+      QRCode.toCanvas(c, card.barcode, { width: 260, margin: 2 }).catch(() => {});
     } else {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.style.maxWidth = "90vw";
@@ -586,28 +615,17 @@ class LoyaltyCardsCard extends HTMLElement {
       try {
         JsBarcode(svg, card.barcode, {
           format: card.barcode_type?.replace("_", "") || "CODE128",
-          lineColor: "#000",
-          background: "#fff",
-          displayValue: true,
-          fontSize: 16,
-          width: 3,
-          height: 120,
-          margin: 16,
+          lineColor: "#000", background: "#fff",
+          displayValue: true, fontSize: 16, width: 3, height: 120, margin: 16,
         });
-      } catch (e) {}
+      } catch {}
     }
-
-    const val = document.createElement("div");
-    val.style.cssText = "font-size:1.1em;letter-spacing:2px;color:#333;";
-    val.textContent = card.barcode;
-    fs.appendChild(val);
-
+    fs.appendChild(Object.assign(document.createElement("div"), {
+      style: { cssText: "font-size:1.1em;letter-spacing:2px;color:#333;" },
+      textContent: card.barcode,
+    }));
     document.body.appendChild(fs);
-
-    // Max brightness hint
-    if (screen.orientation?.lock) {
-      screen.orientation.lock("portrait").catch(() => {});
-    }
+    screen.orientation?.lock?.("portrait")?.catch?.(() => {});
   }
 
   // ── Add Store modal ─────────────────────────────────────────────────────────
@@ -620,58 +638,86 @@ class LoyaltyCardsCard extends HTMLElement {
     mh.querySelector(".close-btn").addEventListener("click", () => this._closeModal());
     frag.appendChild(mh);
 
-    const nameGroup = document.createElement("div");
-    nameGroup.className = "form-group";
-    nameGroup.innerHTML = `<label>Název obchodu</label><input type="text" id="store-name" placeholder="např. Albert" />`;
-    frag.appendChild(nameGroup);
+    // Grouped store selector
+    const storeGroup = this._makeField("Obchod", "");
+    const sel = document.createElement("select");
+    sel.id = "store-select";
+    sel.innerHTML = `<option value="">-- Vyberte nebo zadejte vlastní --</option>`;
 
-    const suggestLabel = document.createElement("div");
-    suggestLabel.className = "section-title";
-    suggestLabel.textContent = "Rychlý výběr:";
-    frag.appendChild(suggestLabel);
-
-    const suggestions = document.createElement("div");
-    suggestions.className = "store-suggestions";
+    const byCategory = {};
     for (const s of CZECH_STORES) {
-      const chip = document.createElement("button");
-      chip.className = "suggestion-chip";
-      chip.textContent = s.name;
-      chip.addEventListener("click", () => {
-        frag.getElementById?.("store-name")?.value;
-        const inp = this.shadowRoot.getElementById("store-name");
-        if (inp) inp.value = s.name;
-        const sel = this.shadowRoot.getElementById("store-category");
-        if (sel) sel.value = s.category;
-      });
-      suggestions.appendChild(chip);
+      (byCategory[s.category] = byCategory[s.category] || []).push(s);
     }
-    frag.appendChild(suggestions);
+    for (const [cat, stores] of Object.entries(byCategory)) {
+      const og = document.createElement("optgroup");
+      og.label = CATEGORY_LABELS[cat] || cat;
+      for (const s of stores) {
+        const opt = document.createElement("option");
+        opt.value = `${s.name}|${s.category}`;
+        opt.textContent = s.name;
+        og.appendChild(opt);
+      }
+      sel.appendChild(og);
+    }
+    sel.appendChild(Object.assign(document.createElement("option"), { value: "custom", textContent: "Jiný obchod…" }));
+    storeGroup.appendChild(sel);
+    frag.appendChild(storeGroup);
 
-    const catGroup = document.createElement("div");
-    catGroup.className = "form-group";
-    catGroup.innerHTML = `
-      <label>Kategorie</label>
-      <select id="store-category">
-        ${Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
-      </select>`;
-    frag.appendChild(catGroup);
+    // Custom fields
+    const customFields = document.createElement("div");
+    customFields.id = "custom-fields";
+    customFields.className = "custom-fields";
+    customFields.style.display = "none";
+    customFields.innerHTML = `
+      <div class="form-group"><label>Název obchodu</label><input type="text" id="store-name" placeholder="Název…" /></div>
+      <div class="form-group"><label>Kategorie</label>
+        <select id="store-category">
+          ${Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
+        </select></div>`;
+    frag.appendChild(customFields);
 
-    const colorGroup = document.createElement("div");
-    colorGroup.className = "form-group";
-    colorGroup.innerHTML = `
-      <label>Barva dlaždice</label>
+    sel.addEventListener("change", () => {
+      const v = sel.value;
+      customFields.style.display = (v === "custom") ? "block" : "none";
+    });
+
+    // Color
+    const colorGroup = this._makeField("Barva dlaždice", `
       <div class="color-row">
         <input type="color" id="store-color" value="#1976d2" />
-        <span style="font-size:.85em;color:var(--secondary-text-color)">Barva pozadí dlaždice</span>
-      </div>`;
+        <span class="hint">Automaticky se upraví podle loga</span>
+      </div>`);
     frag.appendChild(colorGroup);
 
-    const logoGroup = document.createElement("div");
-    logoGroup.className = "form-group";
-    logoGroup.innerHTML = `
-      <label>Logo (volitelné)</label>
-      <input type="text" id="store-logo-url" placeholder="URL obrázku loga" />`;
-    frag.appendChild(logoGroup);
+    // Logo
+    frag.appendChild(Object.assign(document.createElement("div"), {
+      className: "section-title",
+      textContent: "Logo (volitelné)",
+    }));
+    frag.appendChild(this._makeField("", `<input type="text" id="store-logo-url" placeholder="URL obrázku loga…" />`));
+
+    const fileGroup = document.createElement("div");
+    fileGroup.className = "form-group";
+    fileGroup.innerHTML = `
+      <label class="file-label" for="store-logo-file">📁 Vybrat ze souboru / fotky</label>
+      <input type="file" id="store-logo-file" accept="image/*" />
+      <span id="store-logo-fn" class="hint"></span>`;
+    frag.appendChild(fileGroup);
+
+    setTimeout(() => {
+      const fi = this.shadowRoot.getElementById("store-logo-file");
+      const ci = this.shadowRoot.getElementById("store-color");
+      if (fi) fi.addEventListener("change", async () => {
+        const file = fi.files[0];
+        if (!file) return;
+        const fn = this.shadowRoot.getElementById("store-logo-fn");
+        if (fn) fn.textContent = file.name;
+        const url = URL.createObjectURL(file);
+        const color = await dominantColor(url);
+        URL.revokeObjectURL(url);
+        if (color && ci) ci.value = color;
+      });
+    }, 50);
 
     const btnRow = document.createElement("div");
     btnRow.className = "btn-row";
@@ -681,32 +727,41 @@ class LoyaltyCardsCard extends HTMLElement {
     cancelBtn.addEventListener("click", () => this._closeModal());
     const saveBtn = document.createElement("button");
     saveBtn.className = "btn btn-primary";
-    saveBtn.textContent = "Přidat obchod";
+    saveBtn.textContent = "Přidat";
     saveBtn.addEventListener("click", () => this._saveNewStore());
     btnRow.appendChild(cancelBtn);
     btnRow.appendChild(saveBtn);
     frag.appendChild(btnRow);
-
     return frag;
   }
 
   async _saveNewStore() {
-    const name = this.shadowRoot.getElementById("store-name")?.value?.trim();
-    if (!name) return;
-    const category = this.shadowRoot.getElementById("store-category")?.value || "other";
+    const v = this.shadowRoot.getElementById("store-select")?.value;
+    let name, category;
+    if (v && v !== "custom" && v !== "") {
+      [name, category] = v.split("|");
+    } else {
+      name = this.shadowRoot.getElementById("store-name")?.value?.trim();
+      category = this.shadowRoot.getElementById("store-category")?.value || "other";
+    }
+    if (!name) { alert("Zadejte nebo vyberte název obchodu."); return; }
     const color = this.shadowRoot.getElementById("store-color")?.value || "#1976d2";
-    const logoUrl = this.shadowRoot.getElementById("store-logo-url")?.value?.trim();
 
     await this._hass.callService("loyalty_cards", "add_store", { name, category, tile_color: color });
 
-    if (logoUrl) {
-      const stores = await this._hass.callWS({ type: "loyalty_cards/get_data" });
-      const newStore = (stores.stores || []).find((s) => s.name === name);
+    const logoUrl = this.shadowRoot.getElementById("store-logo-url")?.value?.trim();
+    const fileInp = this.shadowRoot.getElementById("store-logo-file");
+    if (logoUrl || fileInp?.files?.length > 0) {
+      const refreshed = await this._hass.callWS({ type: "loyalty_cards/get_data" });
+      const newStore = (refreshed.stores || []).find(s => s.name === name);
       if (newStore) {
-        await this._hass.callService("loyalty_cards", "download_logo", { store_id: newStore.id, url: logoUrl });
+        if (logoUrl) {
+          await this._hass.callService("loyalty_cards", "download_logo", { store_id: newStore.id, url: logoUrl });
+        } else if (fileInp.files[0]) {
+          await this._uploadLogoFile(newStore.id, fileInp.files[0]);
+        }
       }
     }
-
     this._closeModal();
   }
 
@@ -721,99 +776,123 @@ class LoyaltyCardsCard extends HTMLElement {
     mh.querySelector(".close-btn").addEventListener("click", () => this._closeModal());
     frag.appendChild(mh);
 
-    const nameGroup = document.createElement("div");
-    nameGroup.className = "form-group";
-    nameGroup.innerHTML = `<label>Název</label><input type="text" id="edit-name" value="${store.name}" />`;
-    frag.appendChild(nameGroup);
-
-    const catGroup = document.createElement("div");
-    catGroup.className = "form-group";
-    catGroup.innerHTML = `
-      <label>Kategorie</label>
+    frag.appendChild(this._makeField("Název", `<input type="text" id="edit-name" value="${store.name}" />`));
+    frag.appendChild(this._makeField("Kategorie", `
       <select id="edit-category">
         ${Object.entries(CATEGORY_LABELS).map(([k, v]) =>
           `<option value="${k}"${k === store.category ? " selected" : ""}>${v}</option>`
         ).join("")}
-      </select>`;
-    frag.appendChild(catGroup);
-
-    const colorGroup = document.createElement("div");
-    colorGroup.className = "form-group";
-    colorGroup.innerHTML = `
-      <label>Barva dlaždice</label>
+      </select>`));
+    frag.appendChild(this._makeField("Barva dlaždice", `
       <div class="color-row">
         <input type="color" id="edit-color" value="${store.tile_color || "#1976d2"}" />
-      </div>`;
-    frag.appendChild(colorGroup);
+      </div>`));
 
-    // Logo management
-    const logoSection = document.createElement("div");
-    logoSection.className = "section-title";
-    logoSection.textContent = "Logo";
-    frag.appendChild(logoSection);
+    frag.appendChild(Object.assign(document.createElement("div"), {
+      className: "section-title", textContent: "Logo",
+    }));
 
-    const logoGroup = document.createElement("div");
-    logoGroup.className = "form-group logo-section";
+    const logoRow = document.createElement("div");
+    logoRow.className = "logo-row";
     if (store.logo_path) {
-      logoGroup.innerHTML += `<img class="logo-preview" src="${store.logo_path}" alt="Logo" />`;
+      const img = document.createElement("img");
+      img.className = "logo-preview";
+      img.src = store.logo_path;
+      img.alt = "Logo";
+      logoRow.appendChild(img);
     }
-    logoGroup.innerHTML += `<input type="text" id="edit-logo-url" placeholder="URL nového loga" style="flex:1;" />`;
-    frag.appendChild(logoGroup);
+    const urlInp = document.createElement("input");
+    urlInp.type = "text";
+    urlInp.id = "edit-logo-url";
+    urlInp.placeholder = "URL nového loga…";
+    urlInp.style.flex = "1";
+    logoRow.appendChild(urlInp);
+    frag.appendChild(logoRow);
 
-    const logoFileGroup = document.createElement("div");
-    logoFileGroup.className = "form-group";
-    logoFileGroup.innerHTML = `
-      <label>Nebo nahrát ze souboru / fotky</label>
-      <input type="file" id="edit-logo-file" accept="image/*" />`;
-    frag.appendChild(logoFileGroup);
+    const fileGroup = document.createElement("div");
+    fileGroup.className = "form-group";
+    fileGroup.innerHTML = `
+      <label class="file-label" for="edit-logo-file">📁 Nahrát ze souboru / fotky</label>
+      <input type="file" id="edit-logo-file" accept="image/*" />
+      <span id="edit-logo-fn" class="hint"></span>`;
+    frag.appendChild(fileGroup);
+
+    if (store.logo_path) {
+      const delLogoBtn = document.createElement("button");
+      delLogoBtn.className = "btn btn-secondary";
+      delLogoBtn.style.marginBottom = "8px";
+      delLogoBtn.textContent = "Smazat logo";
+      delLogoBtn.addEventListener("click", async () => {
+        await this._hass.callService("loyalty_cards", "delete_logo", { store_id: store.id });
+        this._closeModal();
+      });
+      frag.appendChild(delLogoBtn);
+    }
+
+    setTimeout(() => {
+      const fi = this.shadowRoot.getElementById("edit-logo-file");
+      const ci = this.shadowRoot.getElementById("edit-color");
+      if (fi) fi.addEventListener("change", async () => {
+        const file = fi.files[0];
+        if (!file) return;
+        const fn = this.shadowRoot.getElementById("edit-logo-fn");
+        if (fn) fn.textContent = file.name;
+        const url = URL.createObjectURL(file);
+        const color = await dominantColor(url);
+        URL.revokeObjectURL(url);
+        if (color && ci) ci.value = color;
+      });
+    }, 50);
 
     // Locations
-    const locSection = document.createElement("div");
-    locSection.className = "section-title";
-    locSection.textContent = "Lokace";
-    frag.appendChild(locSection);
-
+    frag.appendChild(Object.assign(document.createElement("div"), {
+      className: "section-title", textContent: "Lokace",
+    }));
     const locList = document.createElement("ul");
     locList.className = "location-list";
     (store.locations || []).forEach((loc, i) => {
       const li = document.createElement("li");
       li.className = "location-item";
-      li.innerHTML = `
-        <span>${loc.label || "Pobočka"} (${loc.lat.toFixed(4)}, ${loc.lon.toFixed(4)}, ${loc.radius_m}m)</span>
-        <button class="btn btn-danger" style="padding:2px 8px;font-size:.75em;" data-idx="${i}">✕</button>`;
-      li.querySelector("button").addEventListener("click", async () => {
+      li.innerHTML = `<span>${loc.label || "Pobočka"} (${loc.lat.toFixed(4)}, ${loc.lon.toFixed(4)}, ${loc.radius_m}m)</span>`;
+      const db = document.createElement("button");
+      db.className = "btn btn-danger";
+      db.style.cssText = "padding:2px 8px;font-size:.75em;";
+      db.textContent = "✕";
+      db.addEventListener("click", async () => {
         await this._hass.callService("loyalty_cards", "delete_location", {
-          store_id: store.id,
-          location_index: i,
+          store_id: store.id, location_index: i,
         });
         this._closeModal();
       });
+      li.appendChild(db);
       locList.appendChild(li);
     });
     frag.appendChild(locList);
 
-    const addLocGroup = document.createElement("div");
-    addLocGroup.className = "form-group";
-    addLocGroup.innerHTML = `
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+    const addLocDiv = document.createElement("div");
+    addLocDiv.className = "form-group";
+    addLocDiv.innerHTML = `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
         <input type="number" id="loc-lat" placeholder="Šířka" step="0.000001" style="flex:1;min-width:80px;" />
         <input type="number" id="loc-lon" placeholder="Délka" step="0.000001" style="flex:1;min-width:80px;" />
         <input type="number" id="loc-radius" placeholder="Poloměr (m)" value="300" style="flex:1;min-width:80px;" />
         <input type="text" id="loc-label" placeholder="Název pobočky" style="flex:2;min-width:120px;" />
       </div>`;
-    frag.appendChild(addLocGroup);
+    frag.appendChild(addLocDiv);
 
     const useGpsBtn = document.createElement("button");
     useGpsBtn.className = "btn btn-secondary";
     useGpsBtn.style.marginBottom = "8px";
-    useGpsBtn.textContent = "Použít aktuální polohu trackeru";
+    useGpsBtn.textContent = "Použít polohu trackeru";
     useGpsBtn.addEventListener("click", () => {
       const trackers = this._data?.settings?.device_trackers || [];
       for (const t of trackers) {
         const st = this._hass.states[t];
         if (st?.attributes?.latitude) {
-          this.shadowRoot.getElementById("loc-lat").value = st.attributes.latitude.toFixed(6);
-          this.shadowRoot.getElementById("loc-lon").value = st.attributes.longitude.toFixed(6);
+          const la = this.shadowRoot.getElementById("loc-lat");
+          const lo = this.shadowRoot.getElementById("loc-lon");
+          if (la) la.value = st.attributes.latitude.toFixed(6);
+          if (lo) lo.value = st.attributes.longitude.toFixed(6);
           break;
         }
       }
@@ -821,57 +900,54 @@ class LoyaltyCardsCard extends HTMLElement {
     frag.appendChild(useGpsBtn);
 
     // Cards list
-    const cardsSection = document.createElement("div");
-    cardsSection.className = "section-title";
-    cardsSection.textContent = `Karty (${(store.cards || []).length})`;
-    frag.appendChild(cardsSection);
-
+    frag.appendChild(Object.assign(document.createElement("div"), {
+      className: "section-title",
+      textContent: `Karty (${(store.cards || []).length})`,
+    }));
     const cardsList = document.createElement("ul");
     cardsList.className = "location-list";
-    (store.cards || []).forEach((c) => {
+    (store.cards || []).forEach((c, i) => {
       const li = document.createElement("li");
       li.className = "location-item";
-      li.innerHTML = `
-        <span>${c.name} · ${c.barcode_type}</span>
-        <button class="btn btn-danger" style="padding:2px 8px;font-size:.75em;">✕</button>`;
-      li.querySelector("button").addEventListener("click", async () => {
-        if (confirm(`Smazat kartu „${c.name}"?`)) {
+      li.innerHTML = `<span>Karta ${i + 1} · ${c.barcode_type}${c.notes ? ` · ${c.notes}` : ""}</span>`;
+      const db = document.createElement("button");
+      db.className = "btn btn-danger";
+      db.style.cssText = "padding:2px 8px;font-size:.75em;";
+      db.textContent = "✕";
+      db.addEventListener("click", async () => {
+        if (confirm(`Smazat kartu ${i + 1}?`)) {
           await this._hass.callService("loyalty_cards", "delete_card", { card_id: c.id });
           this._closeModal();
         }
       });
+      li.appendChild(db);
       cardsList.appendChild(li);
     });
     frag.appendChild(cardsList);
 
     const btnRow = document.createElement("div");
     btnRow.className = "btn-row";
-
     const delBtn = document.createElement("button");
     delBtn.className = "btn btn-danger";
     delBtn.textContent = "Smazat obchod";
     delBtn.addEventListener("click", async () => {
-      if (confirm(`Smazat obchod „${store.name}" a všechny jeho karty?`)) {
+      if (confirm(`Smazat obchod „${store.name}"?`)) {
         await this._hass.callService("loyalty_cards", "delete_store", { store_id: store.id });
         this._closeModal();
       }
     });
-
     const addCardBtn = document.createElement("button");
     addCardBtn.className = "btn btn-secondary";
     addCardBtn.textContent = "+ Přidat kartu";
     addCardBtn.addEventListener("click", () => this._openModal({ type: "add_card", store }));
-
     const saveBtn = document.createElement("button");
     saveBtn.className = "btn btn-primary";
     saveBtn.textContent = "Uložit";
     saveBtn.addEventListener("click", () => this._saveEditStore(store));
-
     btnRow.appendChild(delBtn);
     btnRow.appendChild(addCardBtn);
     btnRow.appendChild(saveBtn);
     frag.appendChild(btnRow);
-
     return frag;
   }
 
@@ -892,9 +968,9 @@ class LoyaltyCardsCard extends HTMLElement {
       await this._hass.callService("loyalty_cards", "download_logo", { store_id: store.id, url: logoUrl });
     }
 
-    const fileInput = this.shadowRoot.getElementById("edit-logo-file");
-    if (fileInput?.files?.length > 0) {
-      await this._uploadLogoFile(store.id, fileInput.files[0]);
+    const fileInp = this.shadowRoot.getElementById("edit-logo-file");
+    if (fileInp?.files?.length > 0) {
+      await this._uploadLogoFile(store.id, fileInp.files[0]);
     }
 
     const lat = parseFloat(this.shadowRoot.getElementById("loc-lat")?.value);
@@ -906,7 +982,6 @@ class LoyaltyCardsCard extends HTMLElement {
         store_id: store.id, lat, lon, radius_m: radius, label,
       });
     }
-
     this._closeModal();
   }
 
@@ -915,8 +990,7 @@ class LoyaltyCardsCard extends HTMLElement {
       const reader = new FileReader();
       reader.onload = async (e) => {
         await this._hass.callService("loyalty_cards", "upload_logo", {
-          store_id: storeId,
-          data_url: e.target.result,
+          store_id: storeId, data_url: e.target.result,
         });
         resolve();
       };
@@ -926,7 +1000,8 @@ class LoyaltyCardsCard extends HTMLElement {
 
   // ── Add Card modal ──────────────────────────────────────────────────────────
   _buildAddCardModal() {
-    const { store } = this._modal;
+    const { store, prefill = {} } = this._modal;
+    const cardCount = (store.cards || []).length;
     const frag = document.createDocumentFragment();
 
     const mh = document.createElement("div");
@@ -935,45 +1010,50 @@ class LoyaltyCardsCard extends HTMLElement {
     mh.querySelector(".close-btn").addEventListener("click", () => this._closeModal());
     frag.appendChild(mh);
 
-    const nameGroup = document.createElement("div");
-    nameGroup.className = "form-group";
-    nameGroup.innerHTML = `<label>Název karty</label><input type="text" id="card-name" value="Moje karta" />`;
-    frag.appendChild(nameGroup);
+    frag.appendChild(this._makeField("Číslo / kód", `
+      <input type="text" id="card-barcode" placeholder="Zadejte nebo naskenujte" value="${prefill.barcode || ""}" />`));
 
-    const barcodeGroup = document.createElement("div");
-    barcodeGroup.className = "form-group";
-    barcodeGroup.innerHTML = `<label>Číslo / kód</label><input type="text" id="card-barcode" placeholder="Zadejte nebo naskenujte" />`;
-    frag.appendChild(barcodeGroup);
+    // Scan buttons
+    const scanRow = document.createElement("div");
+    scanRow.className = "scan-row";
 
-    const scanBtn = document.createElement("button");
-    scanBtn.className = "scan-btn";
-    scanBtn.textContent = "📷  Naskenovat kamerou nebo vybrat obrázek";
-    scanBtn.addEventListener("click", () => this._openModal({ type: "scan", store }));
-    frag.appendChild(scanBtn);
+    const camBtn = document.createElement("button");
+    camBtn.className = "scan-btn";
+    camBtn.textContent = "📷 Kamera";
+    camBtn.addEventListener("click", () => this._startLiveScanner(store));
+    scanRow.appendChild(camBtn);
 
-    const typeGroup = document.createElement("div");
-    typeGroup.className = "form-group";
-    typeGroup.innerHTML = `
-      <label>Typ kódu</label>
+    const fileLabel = document.createElement("label");
+    fileLabel.className = "scan-btn";
+    fileLabel.htmlFor = "scan-file-input";
+    fileLabel.textContent = "🖼 Z obrázku";
+    scanRow.appendChild(fileLabel);
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.id = "scan-file-input";
+    fileInput.accept = "image/*";
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (file) await this._scanFromFile(file);
+    });
+    scanRow.appendChild(fileInput);
+    frag.appendChild(scanRow);
+
+    // Barcode type select
+    const typeOpts = [
+      ["EAN_13","EAN-13"], ["EAN_8","EAN-8"], ["CODE_128","Code 128"],
+      ["CODE_39","Code 39"], ["QR_CODE","QR kód"], ["DATA_MATRIX","Data Matrix"],
+      ["PDF_417","PDF-417"], ["AZTEC","Aztec"], ["ITF","ITF"], ["UPC_A","UPC-A"], ["UPC_E","UPC-E"],
+    ];
+    const selected = prefill.barcode_type || "CODE_128";
+    frag.appendChild(this._makeField("Typ kódu", `
       <select id="card-type">
-        <option value="EAN_13">EAN-13</option>
-        <option value="EAN_8">EAN-8</option>
-        <option value="CODE_128" selected>Code 128</option>
-        <option value="CODE_39">Code 39</option>
-        <option value="QR_CODE">QR kód</option>
-        <option value="DATA_MATRIX">Data Matrix</option>
-        <option value="PDF_417">PDF-417</option>
-        <option value="AZTEC">Aztec</option>
-        <option value="ITF">ITF</option>
-        <option value="UPC_A">UPC-A</option>
-        <option value="UPC_E">UPC-E</option>
-      </select>`;
-    frag.appendChild(typeGroup);
+        ${typeOpts.map(([v, l]) => `<option value="${v}"${v === selected ? " selected" : ""}>${l}</option>`).join("")}
+      </select>`));
 
-    const notesGroup = document.createElement("div");
-    notesGroup.className = "form-group";
-    notesGroup.innerHTML = `<label>Poznámka</label><textarea id="card-notes" rows="2" placeholder="Volitelná poznámka"></textarea>`;
-    frag.appendChild(notesGroup);
+    frag.appendChild(this._makeField("Poznámka (volitelná)", `
+      <textarea id="card-notes" rows="2" placeholder=""></textarea>`));
 
     const btnRow = document.createElement("div");
     btnRow.className = "btn-row";
@@ -984,156 +1064,147 @@ class LoyaltyCardsCard extends HTMLElement {
     const saveBtn = document.createElement("button");
     saveBtn.className = "btn btn-primary";
     saveBtn.textContent = "Přidat kartu";
-    saveBtn.addEventListener("click", () => this._saveNewCard(store));
+    saveBtn.addEventListener("click", () => this._saveNewCard(store, cardCount));
     btnRow.appendChild(cancelBtn);
     btnRow.appendChild(saveBtn);
     frag.appendChild(btnRow);
-
     return frag;
   }
 
-  async _saveNewCard(store) {
+  async _saveNewCard(store, cardIndex) {
     const barcode = this.shadowRoot.getElementById("card-barcode")?.value?.trim();
     if (!barcode) { alert("Zadejte číslo karty."); return; }
-    const name = this.shadowRoot.getElementById("card-name")?.value?.trim() || "Karta";
     const type = this.shadowRoot.getElementById("card-type")?.value || "CODE_128";
     const notes = this.shadowRoot.getElementById("card-notes")?.value?.trim() || "";
-
     await this._hass.callService("loyalty_cards", "add_card", {
-      store_id: store.id, name, barcode, barcode_type: type, notes,
+      store_id: store.id,
+      name: `Karta ${cardIndex + 1}`,
+      barcode,
+      barcode_type: type,
+      notes,
     });
     this._closeModal();
   }
 
-  // ── Scanner modal ───────────────────────────────────────────────────────────
-  _buildScanModal() {
-    const { store } = this._modal;
-    const frag = document.createDocumentFragment();
+  // ── Scanner – live camera (on document.body to bypass shadow DOM) ──────────
+  _startLiveScanner(store) {
+    const readerId = "lc-scanner-reader";
+    const overlay = document.createElement("div");
+    overlay.id = "lc-scanner-overlay";
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:10000;background:#000;display:flex;flex-direction:column;";
 
-    const mh = document.createElement("div");
-    mh.className = "modal-header";
-    mh.innerHTML = `<span class="modal-title">Skenovat kód</span><button class="close-btn">✕</button>`;
-    mh.querySelector(".close-btn").addEventListener("click", () => {
-      this._stopScanner();
-      this._openModal({ type: "add_card", store });
+    const header = document.createElement("div");
+    header.style.cssText =
+      "display:flex;justify-content:space-between;align-items:center;padding:16px;color:#fff;flex-shrink:0;";
+    header.innerHTML = `
+      <span style="font-size:1.1em;font-weight:600;">Skenování</span>
+      <button id="lc-close-scan" style="background:none;border:none;color:#fff;font-size:1.8em;cursor:pointer;padding:0;">✕</button>`;
+    overlay.appendChild(header);
+
+    const readerDiv = document.createElement("div");
+    readerDiv.id = readerId;
+    readerDiv.style.cssText = "flex:1;overflow:hidden;";
+    overlay.appendChild(readerDiv);
+
+    const hint = document.createElement("p");
+    hint.style.cssText = "color:#aaa;text-align:center;font-size:.85em;padding:12px;flex-shrink:0;margin:0;";
+    hint.textContent = "Namiřte kameru na čárový nebo QR kód.";
+    overlay.appendChild(hint);
+
+    document.body.appendChild(overlay);
+
+    document.getElementById("lc-close-scan").addEventListener("click", () => {
+      this._stopLiveScanner();
     });
-    frag.appendChild(mh);
 
-    const info = document.createElement("p");
-    info.style.cssText = "font-size:.85em;color:var(--secondary-text-color);margin:0 0 12px;";
-    info.textContent = "Nasměrujte kameru na čárový nebo QR kód, nebo vyberte obrázek ze souboru.";
-    frag.appendChild(info);
-
-    const reader = document.createElement("div");
-    reader.id = "reader";
-    frag.appendChild(reader);
-
-    const result = document.createElement("div");
-    result.id = "scan-result";
-    result.style.cssText = "margin-top:12px;font-size:.85em;color:var(--primary-text-color);";
-    frag.appendChild(result);
-
-    setTimeout(() => this._startScanner(store), 100);
-
-    return frag;
+    try {
+      this._scanner = new Html5Qrcode(readerId, { verbose: false });
+      this._scanner
+        .start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 150 } },
+          (text, result) => {
+            const type = this._mapScanFormat(result?.result?.format?.formatName);
+            this._stopLiveScanner();
+            this._modal = { type: "add_card", store, prefill: { barcode: text, barcode_type: type } };
+            this._render();
+          }
+        )
+        .catch(() => {
+          hint.textContent = "Kamera nedostupná nebo zakázaná.";
+        });
+    } catch {
+      this._stopLiveScanner();
+    }
   }
 
-  _startScanner(store) {
-    const readerEl = this.shadowRoot.getElementById("reader");
-    if (!readerEl) return;
-
-    this._scanner = new Html5Qrcode("reader", { formatsToSupport: undefined, verbose: false });
-
-    const onSuccess = (decodedText, decodedResult) => {
-      this._stopScanner();
-      const type = this._mapScanFormat(decodedResult?.result?.format?.formatName);
-      this._modal = { type: "add_card", store, prefill: { barcode: decodedText, barcode_type: type } };
-      this._render();
-      setTimeout(() => {
-        const inp = this.shadowRoot.getElementById("card-barcode");
-        if (inp) inp.value = decodedText;
-        const sel = this.shadowRoot.getElementById("card-type");
-        if (sel) sel.value = type;
-      }, 80);
-    };
-
-    const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-
-    this._scanner
-      .start({ facingMode: "environment" }, config, onSuccess)
-      .catch(() => {
-        // Camera denied – show file picker fallback
-        const resultEl = this.shadowRoot.getElementById("scan-result");
-        if (resultEl) resultEl.textContent = "Kamera nedostupná – vyberte obrázek níže.";
-      });
-
-    // File picker support
-    Html5Qrcode.scanFile = Html5Qrcode.scanFile || (() => {});
-    const filePicker = document.createElement("input");
-    filePicker.type = "file";
-    filePicker.accept = "image/*";
-    filePicker.style.cssText = "margin-top:12px;width:100%;";
-    filePicker.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try {
-        const scanner = new Html5Qrcode("reader", { verbose: false });
-        const result = await scanner.scanFile(file, true);
-        onSuccess(result, null);
-      } catch (err) {
-        const resultEl = this.shadowRoot.getElementById("scan-result");
-        if (resultEl) resultEl.textContent = "Kód se nepodařilo přečíst. Zkuste jiný obrázek.";
-      }
-    });
-    const readerAfter = this.shadowRoot.getElementById("reader");
-    readerAfter?.parentNode?.insertBefore(filePicker, readerAfter.nextSibling);
-  }
-
-  _stopScanner() {
+  _stopLiveScanner() {
     if (this._scanner) {
       this._scanner.stop().catch(() => {});
       this._scanner = null;
+    }
+    const overlay = document.getElementById("lc-scanner-overlay");
+    if (overlay) document.body.removeChild(overlay);
+  }
+
+  // ── Scanner – from file (also on document.body to bypass shadow DOM) ───────
+  async _scanFromFile(file) {
+    const tempId = "lc-temp-" + Date.now();
+    const tempDiv = document.createElement("div");
+    tempDiv.id = tempId;
+    tempDiv.style.display = "none";
+    document.body.appendChild(tempDiv);
+
+    try {
+      const scanner = new Html5Qrcode(tempId, { verbose: false });
+      let text, formatName;
+      try {
+        const result = await scanner.scanFileV2(file, false);
+        text = result.decodedText;
+        formatName = result.result?.format?.formatName;
+      } catch {
+        text = await scanner.scanFile(file, false);
+      }
+      const barcodeInp = this.shadowRoot.getElementById("card-barcode");
+      const typeSelect = this.shadowRoot.getElementById("card-type");
+      if (barcodeInp) barcodeInp.value = text;
+      if (typeSelect && formatName) typeSelect.value = this._mapScanFormat(formatName);
+    } catch {
+      alert("Kód se nepodařilo přečíst. Zkuste jiný obrázek.");
+    } finally {
+      if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
     }
   }
 
   _mapScanFormat(fmt) {
     const map = {
-      QR_CODE: "QR_CODE",
-      EAN_13: "EAN_13",
-      EAN_8: "EAN_8",
-      CODE_128: "CODE_128",
-      CODE_39: "CODE_39",
-      ITF: "ITF",
-      PDF_417: "PDF_417",
-      AZTEC: "AZTEC",
-      DATA_MATRIX: "DATA_MATRIX",
-      UPC_A: "UPC_A",
-      UPC_E: "UPC_E",
+      QR_CODE: "QR_CODE", EAN_13: "EAN_13", EAN_8: "EAN_8",
+      CODE_128: "CODE_128", CODE_39: "CODE_39", ITF: "ITF",
+      PDF_417: "PDF_417", AZTEC: "AZTEC", DATA_MATRIX: "DATA_MATRIX",
+      UPC_A: "UPC_A", UPC_E: "UPC_E",
     };
     return map[fmt] || "CODE_128";
   }
 
-  // ── Error state ─────────────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  _makeField(labelText, inputHtml) {
+    const div = document.createElement("div");
+    div.className = "form-group";
+    div.innerHTML = labelText ? `<label>${labelText}</label>${inputHtml}` : inputHtml;
+    return div;
+  }
+
   _renderError(msg) {
-    this.shadowRoot.innerHTML = `
-      <style>${STYLES}</style>
-      <div class="card-root">
-        <div class="empty" style="padding:32px;">${msg}</div>
-      </div>`;
+    this.shadowRoot.innerHTML = `<style>${STYLES}</style>
+      <div class="card-root"><div class="empty" style="padding:32px;">${msg}</div></div>`;
   }
 
-  // ── HA card metadata ────────────────────────────────────────────────────────
-  static getConfigElement() {
-    return document.createElement("loyalty-cards-card-editor");
-  }
-
-  static getStubConfig() {
-    return {};
-  }
+  static getConfigElement() { return document.createElement("loyalty-cards-card-editor"); }
+  static getStubConfig() { return {}; }
 }
 
 customElements.define("loyalty-cards-card", LoyaltyCardsCard);
-
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "loyalty-cards-card",

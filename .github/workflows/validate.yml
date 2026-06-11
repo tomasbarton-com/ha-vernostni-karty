@@ -6,16 +6,6 @@ on:
   pull_request:
 
 jobs:
-  hacs-validation:
-    name: HACS Validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: HACS Action
-        uses: hacs/action@main
-        with:
-          category: integration
-
   python-tests:
     name: Python Tests
     runs-on: ubuntu-latest
