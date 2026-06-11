@@ -60,9 +60,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         dst_dir = Path(hass.config.path("www", "loyalty-cards"))
         dst_dir.mkdir(parents=True, exist_ok=True)
         dst = dst_dir / "loyalty-cards-card.js"
-        if not dst.exists() or src.stat().st_size != dst.stat().st_size:
-            await hass.async_add_executor_job(shutil.copy2, str(src), str(dst))
-            _LOGGER.debug("Deployed Lovelace card to %s", dst)
+        await hass.async_add_executor_job(shutil.copy2, str(src), str(dst))
+        _LOGGER.debug("Deployed Lovelace card to %s", dst)
         add_extra_js_url(hass, "/local/loyalty-cards/loyalty-cards-card.js")
     else:
         _LOGGER.error("loyalty-cards-card.js not found at %s", src)
