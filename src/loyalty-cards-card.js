@@ -223,10 +223,15 @@ class LoyaltyCardsCard extends HTMLElement {
   }
 
   set hass(hass) {
+    const firstLoad = !this._data;
     this._hass = hass;
     this._updateNearby();
-    if (!this._data) this._loadData();
-    else this._render();
+    if (firstLoad) {
+      this._loadData();
+    } else if (!this._modal) {
+      // Don't re-render while a modal/form is open — would destroy user input
+      this._render();
+    }
   }
 
   setConfig(config) {
@@ -245,7 +250,7 @@ class LoyaltyCardsCard extends HTMLElement {
   _subscribe() {
     if (!this._hass || this._unsubscribeBus) return;
     this._unsubscribeBus = this._hass.connection.subscribeEvents(
-      () => this._loadData(),
+      () => { if (!this._modal) this._loadData(); },
       "loyalty_cards_updated"
     );
   }
@@ -483,7 +488,11 @@ class LoyaltyCardsCard extends HTMLElement {
 
   // ── Modal router ────────────────────────────────────────────────────────────
   _openModal(modal) { this._modal = modal; this._render(); }
-  _closeModal() { this._modal = null; this._render(); }
+  _closeModal() {
+    this._modal = null;
+    this._render();       // immediate UI update (grid visible again)
+    this._loadData();     // background refresh to pick up any saved changes
+  }
 
   _buildModalOverlay() {
     const overlay = document.createElement("div");
@@ -1140,12 +1149,11 @@ class LoyaltyCardsCard extends HTMLElement {
   }
 
   _stopLiveScanner() {
-    if (this._scanner) {
-      this._scanner.stop().catch(() => {});
-      this._scanner = null;
-    }
     const overlay = document.getElementById("lc-scanner-overlay");
-    if (overlay) document.body.removeChild(overlay);
+    const scanner = this._scanner;
+    this._scanner = null;
+    if (scanner) scanner.stop().catch(() => {});
+    if (overlay?.parentNode) overlay.parentNode.removeChild(overlay);
   }
 
   // ── Scanner – from file (also on document.body to bypass shadow DOM) ───────
@@ -1153,23 +1161,30 @@ class LoyaltyCardsCard extends HTMLElement {
     const tempId = "lc-temp-" + Date.now();
     const tempDiv = document.createElement("div");
     tempDiv.id = tempId;
-    tempDiv.style.display = "none";
+    // Needs dimensions in DOM for canvas rendering — use off-screen, not display:none
+    tempDiv.style.cssText = "position:fixed;left:-9999px;top:0;width:300px;height:300px;visibility:hidden;";
     document.body.appendChild(tempDiv);
 
     try {
-      const scanner = new Html5Qrcode(tempId, { verbose: false });
+      const scanner = new Html5Qrcode(tempId);
       let text, formatName;
-      try {
-        const result = await scanner.scanFileV2(file, false);
-        text = result.decodedText;
-        formatName = result.result?.format?.formatName;
-      } catch {
+      if (typeof scanner.scanFileV2 === "function") {
+        try {
+          const result = await scanner.scanFileV2(file, false);
+          text = result.decodedText;
+          formatName = result.result?.format?.formatName;
+        } catch {
+          text = await scanner.scanFile(file, false);
+        }
+      } else {
         text = await scanner.scanFile(file, false);
       }
-      const barcodeInp = this.shadowRoot.getElementById("card-barcode");
-      const typeSelect = this.shadowRoot.getElementById("card-type");
-      if (barcodeInp) barcodeInp.value = text;
-      if (typeSelect && formatName) typeSelect.value = this._mapScanFormat(formatName);
+      if (text) {
+        const barcodeInp = this.shadowRoot.getElementById("card-barcode");
+        const typeSelect = this.shadowRoot.getElementById("card-type");
+        if (barcodeInp) barcodeInp.value = text;
+        if (typeSelect && formatName) typeSelect.value = this._mapScanFormat(formatName);
+      }
     } catch {
       alert("Kód se nepodařilo přečíst. Zkuste jiný obrázek.");
     } finally {
@@ -1200,7 +1215,6 @@ class LoyaltyCardsCard extends HTMLElement {
       <div class="card-root"><div class="empty" style="padding:32px;">${msg}</div></div>`;
   }
 
-  static getConfigElement() { return document.createElement("loyalty-cards-card-editor"); }
   static getStubConfig() { return {}; }
 }
 
