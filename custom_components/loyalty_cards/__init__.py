@@ -7,6 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -51,16 +52,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN]["store"] = store
 
-    # Register static path for www assets
-    www_path = Path(__file__).parent.parent.parent / "www" / "loyalty-cards"
+    # Serve the bundled Lovelace card from inside custom_components/loyalty_cards/www/
+    www_path = Path(__file__).parent / "www"
     www_path.mkdir(parents=True, exist_ok=True)
-
-    # Register Lovelace resource JS file as a static path
     js_path = www_path / "loyalty-cards-card.js"
     if js_path.exists():
         await hass.http.async_register_static_paths(
-            [StaticPathConfig("/local/loyalty-cards", str(www_path), cache_headers=False)]
+            [StaticPathConfig("/loyalty_cards_static", str(www_path), cache_headers=False)]
         )
+        add_extra_js_url(hass, "/loyalty_cards_static/loyalty-cards-card.js")
 
     _register_services(hass, store)
     _register_websocket(hass, store)

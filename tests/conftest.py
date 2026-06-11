@@ -95,6 +95,9 @@ sys.modules["voluptuous"] = vol
 _mock("homeassistant.components")
 _mock("homeassistant.components.http")
 
+frontend_mod = _mock("homeassistant.components.frontend")
+frontend_mod.add_extra_js_url = MagicMock()
+
 # Sub-module aliases so imports resolve
 sys.modules["homeassistant.core"] = ha_core.core
 sys.modules["homeassistant.config_entries"] = config_entries_mod
@@ -104,3 +107,4 @@ sys.modules["homeassistant.helpers.entity_registry"] = helpers_er
 sys.modules["homeassistant.helpers.config_validation"] = helpers_cv
 sys.modules["homeassistant.components.websocket_api"] = ws_mod
 sys.modules["homeassistant.components.http"] = http_mod
+sys.modules["homeassistant.components.frontend"] = frontend_mod

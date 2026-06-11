@@ -5,7 +5,7 @@ import terser from "@rollup/plugin-terser";
 export default {
   input: "src/loyalty-cards-card.js",
   output: {
-    file: "www/loyalty-cards/loyalty-cards-card.js",
+    file: "custom_components/loyalty_cards/www/loyalty-cards-card.js",
     format: "es",
     sourcemap: false,
   },
