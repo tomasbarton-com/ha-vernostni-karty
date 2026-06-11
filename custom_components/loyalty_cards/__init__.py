@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
 from pathlib import Path
 from typing import Any
+
+_VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text()).get("version", "0")
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
@@ -62,7 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         dst = dst_dir / "loyalty-cards-card.js"
         await hass.async_add_executor_job(shutil.copy2, str(src), str(dst))
         _LOGGER.debug("Deployed Lovelace card to %s", dst)
-        add_extra_js_url(hass, "/local/loyalty-cards/loyalty-cards-card.js")
+        add_extra_js_url(hass, f"/local/loyalty-cards/loyalty-cards-card.js?v={_VERSION}")
     else:
         _LOGGER.error("loyalty-cards-card.js not found at %s", src)
 
