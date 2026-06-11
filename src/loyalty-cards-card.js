@@ -280,8 +280,25 @@ class LoyaltyCardsCard extends HTMLElement {
       this._updateNearby();
       this._render();
       if (!this._unsubscribeBus) this._subscribe();
+      this._autoDownloadLogos();
     } catch {
       this._renderError("Nepodařilo se načíst data. Je integrace Věrnostní karty nainstalována?");
+    }
+  }
+
+  _autoDownloadLogos() {
+    if (!this._data?.stores || !this._hass) return;
+    this._logoPending = this._logoPending || new Set();
+    for (const store of this._data.stores) {
+      if (store.logo_path) continue;
+      if (this._logoPending.has(store.id)) continue;
+      const match = CZECH_STORES.find(s => s.name === store.name);
+      if (!match?.logo_domain) continue;
+      this._logoPending.add(store.id);
+      this._hass.callService("loyalty_cards", "download_logo", {
+        store_id: store.id,
+        url: `https://logo.clearbit.com/${match.logo_domain}`,
+      }).catch(() => { this._logoPending.delete(store.id); });
     }
   }
 
@@ -465,10 +482,14 @@ class LoyaltyCardsCard extends HTMLElement {
     });
     tile.appendChild(menuBtn);
 
-    if (store.logo_path) {
+    const logoSrc = store.logo_path || (() => {
+      const m = CZECH_STORES.find(s => s.name === store.name);
+      return m?.logo_domain ? `https://logo.clearbit.com/${m.logo_domain}` : null;
+    })();
+    if (logoSrc) {
       const img = document.createElement("img");
       img.className = "tile-logo";
-      img.src = store.logo_path;
+      img.src = logoSrc;
       img.alt = store.name;
       img.onerror = () => img.replaceWith(this._buildInitials(store.name));
       tile.appendChild(img);
