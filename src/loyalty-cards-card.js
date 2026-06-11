@@ -4,48 +4,55 @@ import { Html5Qrcode } from "html5-qrcode";
 
 // ── Czech store catalogue ───────────────────────────────────────────────────
 const CZECH_STORES = [
-  { name: "Albert", category: "groceries" },
-  { name: "Billa", category: "groceries" },
-  { name: "Kaufland", category: "groceries" },
-  { name: "Lidl", category: "groceries" },
-  { name: "Penny", category: "groceries" },
-  { name: "Tesco", category: "groceries" },
-  { name: "Globus", category: "groceries" },
-  { name: "Coop", category: "groceries" },
-  { name: "Norma", category: "groceries" },
-  { name: "dm", category: "drugstore" },
-  { name: "Rossmann", category: "drugstore" },
-  { name: "Teta", category: "drugstore" },
-  { name: "Dr. Max", category: "pharmacy" },
-  { name: "Benu", category: "pharmacy" },
-  { name: "Pilulka", category: "pharmacy" },
-  { name: "OBI", category: "diy" },
-  { name: "Bauhaus", category: "diy" },
-  { name: "Hornbach", category: "diy" },
-  { name: "Alza", category: "electronics" },
-  { name: "CZC", category: "electronics" },
-  { name: "Datart", category: "electronics" },
-  { name: "Decathlon", category: "sport" },
-  { name: "Sportisimo", category: "sport" },
-  { name: "Hervis", category: "sport" },
-  { name: "H&M", category: "fashion" },
-  { name: "Zara", category: "fashion" },
-  { name: "Reserved", category: "fashion" },
-  { name: "Primark", category: "fashion" },
-  { name: "CCC", category: "fashion" },
-  { name: "Deichmann", category: "fashion" },
-  { name: "Pepco", category: "fashion" },
-  { name: "McDonald's", category: "fastfood" },
-  { name: "KFC", category: "fastfood" },
-  { name: "Burger King", category: "fastfood" },
-  { name: "Subway", category: "fastfood" },
-  { name: "Pizza Hut", category: "fastfood" },
-  { name: "Starbucks", category: "fastfood" },
-  { name: "Costa Coffee", category: "fastfood" },
-  { name: "IKEA", category: "other" },
-  { name: "Okay", category: "other" },
-  { name: "Tchibo", category: "other" },
-  { name: "Flying Tiger", category: "other" },
+  { name: "Albert", category: "groceries", logo_domain: "albert.cz" },
+  { name: "Billa", category: "groceries", logo_domain: "billa.cz" },
+  { name: "Kaufland", category: "groceries", logo_domain: "kaufland.cz" },
+  { name: "Lidl", category: "groceries", logo_domain: "lidl.cz" },
+  { name: "Penny", category: "groceries", logo_domain: "penny.cz" },
+  { name: "Tesco", category: "groceries", logo_domain: "tesco.cz" },
+  { name: "Globus", category: "groceries", logo_domain: "globus.cz" },
+  { name: "Coop", category: "groceries", logo_domain: "coop.cz" },
+  { name: "Norma", category: "groceries", logo_domain: "norma.de" },
+  { name: "dm", category: "drugstore", logo_domain: "dm.cz" },
+  { name: "Rossmann", category: "drugstore", logo_domain: "rossmann.cz" },
+  { name: "Teta", category: "drugstore", logo_domain: "tetadrogerie.cz" },
+  { name: "Dr. Max", category: "pharmacy", logo_domain: "drmax.cz" },
+  { name: "Benu", category: "pharmacy", logo_domain: "benu.cz" },
+  { name: "Pilulka", category: "pharmacy", logo_domain: "pilulka.cz" },
+  { name: "Lékárna.cz", category: "pharmacy", logo_domain: "lekarna.cz" },
+  { name: "OBI", category: "diy", logo_domain: "obi.cz" },
+  { name: "Bauhaus", category: "diy", logo_domain: "bauhaus.cz" },
+  { name: "Hornbach", category: "diy", logo_domain: "hornbach.cz" },
+  { name: "Alza", category: "electronics", logo_domain: "alza.cz" },
+  { name: "CZC", category: "electronics", logo_domain: "czc.cz" },
+  { name: "Datart", category: "electronics", logo_domain: "datart.cz" },
+  { name: "ElectroWorld", category: "electronics", logo_domain: "electroworld.cz" },
+  { name: "Decathlon", category: "sport", logo_domain: "decathlon.cz" },
+  { name: "Sportisimo", category: "sport", logo_domain: "sportisimo.cz" },
+  { name: "Hervis", category: "sport", logo_domain: "hervis.cz" },
+  { name: "H&M", category: "fashion", logo_domain: "hm.com" },
+  { name: "Zara", category: "fashion", logo_domain: "zara.com" },
+  { name: "Reserved", category: "fashion", logo_domain: "reserved.com" },
+  { name: "Primark", category: "fashion", logo_domain: "primark.com" },
+  { name: "CCC", category: "fashion", logo_domain: "ccc.eu" },
+  { name: "Deichmann", category: "fashion", logo_domain: "deichmann.com" },
+  { name: "New Yorker", category: "fashion", logo_domain: "newyorker.de" },
+  { name: "Pepco", category: "fashion", logo_domain: "pepco.com" },
+  { name: "McDonald's", category: "fastfood", logo_domain: "mcdonalds.cz" },
+  { name: "KFC", category: "fastfood", logo_domain: "kfc.cz" },
+  { name: "Burger King", category: "fastfood", logo_domain: "burgerking.cz" },
+  { name: "Subway", category: "fastfood", logo_domain: "subway.com" },
+  { name: "Pizza Hut", category: "fastfood", logo_domain: "pizzahut.cz" },
+  { name: "Starbucks", category: "fastfood", logo_domain: "starbucks.cz" },
+  { name: "Costa Coffee", category: "fastfood", logo_domain: "costacoffee.cz" },
+  { name: "Bageterie Boulevard", category: "fastfood", logo_domain: "bageterie.com" },
+  { name: "IKEA", category: "other", logo_domain: "ikea.cz" },
+  { name: "Okay", category: "other", logo_domain: "okay.cz" },
+  { name: "Kika", category: "other", logo_domain: "kika.cz" },
+  { name: "Zoot", category: "other", logo_domain: "zoot.cz" },
+  { name: "Tchibo", category: "other", logo_domain: "tchibo.cz" },
+  { name: "Action", category: "other", logo_domain: "action.com" },
+  { name: "Flying Tiger", category: "other", logo_domain: "flyingtiger.com" },
 ];
 
 const CATEGORY_LABELS = {
@@ -746,9 +753,12 @@ class LoyaltyCardsCard extends HTMLElement {
 
   async _saveNewStore() {
     const v = this.shadowRoot.getElementById("store-select")?.value;
-    let name, category;
+    let name, category, logoDomain;
     if (v && v !== "custom" && v !== "") {
-      [name, category] = v.split("|");
+      const found = CZECH_STORES.find(s => `${s.name}|${s.category}` === v);
+      name = found?.name;
+      category = found?.category;
+      logoDomain = found?.logo_domain;
     } else {
       name = this.shadowRoot.getElementById("store-name")?.value?.trim();
       category = this.shadowRoot.getElementById("store-category")?.value || "other";
@@ -760,14 +770,22 @@ class LoyaltyCardsCard extends HTMLElement {
 
     const logoUrl = this.shadowRoot.getElementById("store-logo-url")?.value?.trim();
     const fileInp = this.shadowRoot.getElementById("store-logo-file");
-    if (logoUrl || fileInp?.files?.length > 0) {
+    const hasExplicitLogo = logoUrl || fileInp?.files?.length > 0;
+
+    if (hasExplicitLogo || logoDomain) {
       const refreshed = await this._hass.callWS({ type: "loyalty_cards/get_data" });
       const newStore = (refreshed.stores || []).find(s => s.name === name);
       if (newStore) {
         if (logoUrl) {
           await this._hass.callService("loyalty_cards", "download_logo", { store_id: newStore.id, url: logoUrl });
-        } else if (fileInp.files[0]) {
+        } else if (fileInp?.files?.[0]) {
           await this._uploadLogoFile(newStore.id, fileInp.files[0]);
+        } else if (logoDomain) {
+          // Auto-fetch logo from Clearbit on background — don't block close
+          this._hass.callService("loyalty_cards", "download_logo", {
+            store_id: newStore.id,
+            url: `https://logo.clearbit.com/${logoDomain}`,
+          }).catch(() => {});
         }
       }
     }
