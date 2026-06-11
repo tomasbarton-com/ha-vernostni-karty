@@ -42,4 +42,4 @@ WS_TYPE_GET_STORES = "loyalty_cards/get_stores"
 EVENT_DATA_UPDATED = "loyalty_cards_updated"
 
 LOGO_DIR = "www/loyalty-cards/logos"
-JS_RESOURCE_URL = "/loyalty_cards_static/loyalty-cards-card.js"
+JS_RESOURCE_URL = "/local/loyalty-cards/loyalty-cards-card.js"

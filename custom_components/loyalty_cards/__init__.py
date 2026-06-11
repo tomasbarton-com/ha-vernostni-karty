@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.frontend import add_extra_js_url
-from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 import homeassistant.helpers.config_validation as cv
@@ -52,15 +52,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN]["store"] = store
 
-    # Serve the bundled Lovelace card from inside custom_components/loyalty_cards/www/
-    www_path = Path(__file__).parent / "www"
-    www_path.mkdir(parents=True, exist_ok=True)
-    js_path = www_path / "loyalty-cards-card.js"
-    if js_path.exists():
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig("/loyalty_cards_static", str(www_path), cache_headers=False)]
-        )
-        add_extra_js_url(hass, "/loyalty_cards_static/loyalty-cards-card.js")
+    # Deploy the Lovelace card JS to /config/www/loyalty-cards/ so HA serves it
+    # at /local/loyalty-cards/loyalty-cards-card.js — this is the most reliable
+    # method across all HA versions (no async_register_static_paths needed).
+    src = Path(__file__).parent / "www" / "loyalty-cards-card.js"
+    if src.exists():
+        dst_dir = Path(hass.config.path("www", "loyalty-cards"))
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        dst = dst_dir / "loyalty-cards-card.js"
+        if not dst.exists() or src.stat().st_size != dst.stat().st_size:
+            await hass.async_add_executor_job(shutil.copy2, str(src), str(dst))
+            _LOGGER.debug("Deployed Lovelace card to %s", dst)
+        add_extra_js_url(hass, "/local/loyalty-cards/loyalty-cards-card.js")
+    else:
+        _LOGGER.error("loyalty-cards-card.js not found at %s", src)
 
     _register_services(hass, store)
     _register_websocket(hass, store)
