@@ -1154,14 +1154,25 @@ class LoyaltyCardsCard extends HTMLElement {
     frag.appendChild(this._makeField("Číslo / kód", `
       <input type="text" id="card-barcode" placeholder="Zadejte nebo naskenujte" value="${prefill.barcode || ""}" />`));
 
-    // Scan via camera
+    // Scan from image file
     const scanRow = document.createElement("div");
     scanRow.className = "scan-row";
-    const camBtn = document.createElement("button");
-    camBtn.className = "scan-btn";
-    camBtn.textContent = "📷 Naskenovat kamerou";
-    camBtn.addEventListener("click", () => this._startLiveScanner(store));
-    scanRow.appendChild(camBtn);
+
+    const fileLabel = document.createElement("label");
+    fileLabel.className = "scan-btn";
+    fileLabel.htmlFor = "scan-file-input";
+    fileLabel.textContent = "🖼 Naskenovat z obrázku";
+    scanRow.appendChild(fileLabel);
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.id = "scan-file-input";
+    fileInput.accept = "image/*";
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (file) await this._scanFromFile(file);
+    });
+    scanRow.appendChild(fileInput);
     frag.appendChild(scanRow);
 
     // Barcode type select
