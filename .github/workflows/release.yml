@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            ## Věrnostní karty ${{ github.ref_name }}
+
+            ### Instalace přes HACS
+            1. HACS → Integrace → tři tečky → Vlastní repozitáře
+            2. Přidejte `https://github.com/tomasbarton-com/ha-vernostni-karty`
+            3. Nainstalujte „Věrnostní karty" a restartujte HA
+
+            ### Přidání karty do dashboardu
+            ```yaml
+            type: custom:loyalty-cards-card
+            ```
+
+            ### Changelog
+            Viz [README.md](https://github.com/tomasbarton-com/ha-vernostni-karty/blob/${{ github.ref_name }}/README.md)
+          files: |
+            custom_components/loyalty_cards/www/loyalty-cards-card.js
+            icon.png
+          make_latest: true
