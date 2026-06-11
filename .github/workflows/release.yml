@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. v0.1.2)"
+        required: true
 
 permissions:
   contents: write
@@ -15,12 +20,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git tag ${{ steps.ver.outputs.tag }} || true
+          git push origin ${{ steps.ver.outputs.tag }} || true
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
           body: |
-            ## Věrnostní karty ${{ github.ref_name }}
+            ## Věrnostní karty ${{ steps.ver.outputs.tag }}
 
             ### Instalace přes HACS
             1. HACS → Integrace → tři tečky → Vlastní repozitáře
@@ -31,9 +54,6 @@ jobs:
             ```yaml
             type: custom:loyalty-cards-card
             ```
-
-            ### Changelog
-            Viz [README.md](https://github.com/tomasbarton-com/ha-vernostni-karty/blob/${{ github.ref_name }}/README.md)
           files: |
             custom_components/loyalty_cards/www/loyalty-cards-card.js
             icon.png
