@@ -1,6 +1,6 @@
 {
   "name": "ha-vernostni-karty",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Home Assistant HACS integration – Věrnostní karty",
   "scripts": {
     "build": "rollup -c rollup.config.mjs",

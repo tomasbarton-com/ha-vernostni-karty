@@ -223,6 +223,7 @@ const STYLES = `
                      border-bottom:1px solid var(--divider-color,#eee); color:var(--primary-text-color); }
   .loc-result-item:last-child { border-bottom:none; }
   .loc-result-item:hover { background:var(--secondary-background-color,#f5f5f5); }
+  [hidden] { display: none !important; }
 
   /* Store picker */
   .store-picker-list { border:1px solid var(--divider-color,#ccc); border-radius:6px; max-height:240px;
@@ -295,18 +296,8 @@ class LoyaltyCardsCard extends HTMLElement {
   }
 
   _autoDownloadLogos() {
-    if (!this._data?.stores || !this._hass) return;
-    for (const store of this._data.stores) {
-      if (store.logo_path) continue;
-      if (this._logoPending.has(store.id)) continue;
-      const match = CZECH_STORES.find(s => s.name === store.name);
-      if (!match?.logo_domain) continue;
-      this._logoPending.add(store.id);
-      this._hass.callService("loyalty_cards", "download_logo", {
-        store_id: store.id,
-        url: `https://logo.clearbit.com/${match.logo_domain}`,
-      }).catch(() => { this._logoPending.delete(store.id); });
-    }
+    // Bundled logos are served from /local/loyalty-cards/logos/{key}.png after HA restart.
+    // No external download needed.
   }
 
   _updateNearby() {
@@ -736,7 +727,7 @@ class LoyaltyCardsCard extends HTMLElement {
     const customFields = document.createElement("div");
     customFields.id = "custom-fields";
     customFields.className = "custom-fields";
-    customFields.style.display = "none";
+    customFields.hidden = true;
     customFields.innerHTML = `
       <div class="form-group"><label>Název obchodu</label><input type="text" id="store-name" placeholder="Název…" /></div>
       <div class="form-group"><label>Kategorie</label>
@@ -746,7 +737,7 @@ class LoyaltyCardsCard extends HTMLElement {
 
     const logoSection = document.createElement("div");
     logoSection.id = "logo-section";
-    logoSection.style.display = "none";
+    logoSection.hidden = true;
     logoSection.innerHTML = `
       <div class="section-title">Logo (volitelné)</div>
       <div class="form-group"><input type="text" id="store-logo-url" placeholder="URL obrázku loga…" /></div>
@@ -756,9 +747,9 @@ class LoyaltyCardsCard extends HTMLElement {
         <span id="store-logo-fn" class="hint"></span>
       </div>`;
 
-    const showCustom = (isCustom) => {
-      customFields.style.display = isCustom ? "block" : "none";
-      logoSection.style.display = isCustom ? "block" : "none";
+    const showCustom = (_val, isCustom) => {
+      customFields.hidden = !isCustom;
+      logoSection.hidden = !isCustom;
     };
 
     frag.appendChild(this._buildStorePickerField(showCustom));
