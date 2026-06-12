@@ -2,12 +2,13 @@ import { Html5Qrcode } from "html5-qrcode";
 import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 
-const VERSION = "0.2.6";
+const VERSION = "0.2.7";
 
-// Base URL for bundled logos — served directly from the integration's www/logos/
-// directory via async_register_static_paths (no /config/www/ copy needed).
-// User-uploaded logos still live at /local/loyalty-cards/logos/{store_id}.ext
-const BUNDLED_LOGO_BASE = "/loyalty_cards_www/logos";
+// Bundled logos are copied to /config/www/loyalty-cards/logos/ on every integration
+// setup, so they are served at /local/loyalty-cards/logos/.
+// User-uploaded logos (store.logo_path) are also served from /local/loyalty-cards/logos/
+// but named by store UUID, not store key.
+const BUNDLED_LOGO_BASE = "/local/loyalty-cards/logos";
 
 // ── Store database ────────────────────────────────────────────────────────────
 const CZECH_STORES = [
@@ -492,44 +493,45 @@ class LoyaltyCardsCard extends HTMLElement {
       }));
     }
 
-    // Logo resolution: user-uploaded path > bundled offline logo > initials.
-    // Bundled logos are served from the integration's www/logos/ directory via
-    // async_register_static_paths — no file copying to /config/www/ needed.
-    // User-uploaded logos (store.logo_path) are saved to /config/www/loyalty-cards/logos/
-    // by logo_manager.py and are served from /local/loyalty-cards/logos/.
+    // Logo resolution priority:
+    //  1. store.logo_path  – user-uploaded logo (UUID filename, /local/loyalty-cards/logos/)
+    //  2. bundled logo     – copied from integration www/logos/ to /local/loyalty-cards/logos/
+    //  3. initials         – colored div with store name initials
+    //
+    // If (1) fails (broken path from old Clearbit downloads), we try (2) automatically.
     const match = CZECH_STORES.find(s => s.name === store.name);
     const bundledLogoSrc = match?.logo
       ? `${BUNDLED_LOGO_BASE}/${match.logo}.png?v=${VERSION}`
       : null;
-    // Don't append ?v= to user-uploaded paths — they already have unique UUID names.
-    const logoSrc = store.logo_path || bundledLogoSrc;
+    const primaryLogoSrc = store.logo_path || bundledLogoSrc;
 
-    if (logoSrc) {
+    if (primaryLogoSrc) {
       const img = document.createElement("img");
       img.className = "tile-logo";
-      img.src = logoSrc;
+      img.src = primaryLogoSrc;
       img.alt = store.name;
 
-      // Fallback chain: if user logo_path is broken, try the bundled logo.
-      let usedFallback = false;
+      // Build ordered fallback list (deduplicated, non-null)
+      const fallbacks = [primaryLogoSrc, bundledLogoSrc].filter(
+        (u, i, a) => u && a.indexOf(u) === i
+      );
+      let fallbackIdx = 0;
+
       img.onerror = () => {
-        if (!usedFallback && logoSrc !== bundledLogoSrc && bundledLogoSrc) {
-          usedFallback = true;
-          img.src = bundledLogoSrc;
+        fallbackIdx++;
+        if (fallbackIdx < fallbacks.length) {
+          img.src = fallbacks[fallbackIdx];
         } else {
           img.replaceWith(this._buildInitials(store.name));
         }
       };
 
       img.onload = async () => {
-        // Auto-compute dominant color from logo on first load this session
         if (this._autoColoredStores.has(store.id)) return;
         this._autoColoredStores.add(store.id);
-        const effectiveSrc = usedFallback ? bundledLogoSrc : logoSrc;
-        const color = await dominantColor(effectiveSrc);
+        const color = await dominantColor(img.src);
         if (!color) return;
         tile.style.background = color;
-        // Persist only if the store is still using the default color
         if (!store.tile_color || store.tile_color === "#1976d2") {
           this._hass?.callService("loyalty_cards", "update_store", {
             store_id: store.id, tile_color: color,
@@ -920,7 +922,9 @@ class LoyaltyCardsCard extends HTMLElement {
     let color = this.shadowRoot.getElementById("store-color")?.value || "#1976d2";
     // For known stores, auto-derive tile color from the bundled logo
     if (isKnown && matchedStore?.logo) {
-      const computed = await dominantColor(`${BUNDLED_LOGO_BASE}/${matchedStore.logo}.png?v=${VERSION}`);
+      const computed = await dominantColor(
+        `${BUNDLED_LOGO_BASE}/${matchedStore.logo}.png?v=${VERSION}`
+      );
       if (computed) color = computed;
     }
     await this._hass.callService("loyalty_cards", "add_store", { name, category, tile_color: color });
