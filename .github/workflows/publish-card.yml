@@ -1,0 +1,61 @@
+name: Publish card to ha-vernostni-karty-card
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g. v0.3.0) – leave empty for current"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Push card JS to card repo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build card JS
+        run: npm ci && npm run build
+
+      - name: Clone card repo
+        env:
+          CARD_REPO_PAT: ${{ secrets.CARD_REPO_PAT }}
+        run: |
+          git clone "https://x-access-token:${CARD_REPO_PAT}@github.com/tomasbarton-com/ha-vernostni-karty-card.git" /tmp/card-repo
+
+      - name: Copy files to card repo
+        run: |
+          cp www/loyalty-cards/loyalty-cards-card.js /tmp/card-repo/loyalty-cards-card.js
+          cp icon.png /tmp/card-repo/icon.png
+
+          cat > /tmp/card-repo/hacs.json << 'EOF'
+          {
+            "name": "Věrnostní karty – karta",
+            "content_in_root": true,
+            "filename": "loyalty-cards-card.js",
+            "render_readme": true
+          }
+          EOF
+
+      - name: Commit and push
+        env:
+          CARD_REPO_PAT: ${{ secrets.CARD_REPO_PAT }}
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          cd /tmp/card-repo
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add loyalty-cards-card.js hacs.json icon.png
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "release: ${VERSION}"
+          git push
