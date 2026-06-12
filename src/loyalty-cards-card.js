@@ -2,7 +2,12 @@ import { Html5Qrcode } from "html5-qrcode";
 import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 
-const VERSION = "0.2.5";
+const VERSION = "0.2.6";
+
+// Base URL for bundled logos — served directly from the integration's www/logos/
+// directory via async_register_static_paths (no /config/www/ copy needed).
+// User-uploaded logos still live at /local/loyalty-cards/logos/{store_id}.ext
+const BUNDLED_LOGO_BASE = "/loyalty_cards_www/logos";
 
 // ── Store database ────────────────────────────────────────────────────────────
 const CZECH_STORES = [
@@ -487,22 +492,41 @@ class LoyaltyCardsCard extends HTMLElement {
       }));
     }
 
-    // Logo: prefer stored path, then bundled offline logo, then initials
+    // Logo resolution: user-uploaded path > bundled offline logo > initials.
+    // Bundled logos are served from the integration's www/logos/ directory via
+    // async_register_static_paths — no file copying to /config/www/ needed.
+    // User-uploaded logos (store.logo_path) are saved to /config/www/loyalty-cards/logos/
+    // by logo_manager.py and are served from /local/loyalty-cards/logos/.
     const match = CZECH_STORES.find(s => s.name === store.name);
-    const bundledLogoSrc = match?.logo ? `/local/loyalty-cards/logos/${match.logo}.png?v=${VERSION}` : null;
-    const logoSrc = store.logo_path ? `${store.logo_path}?v=${VERSION}` : bundledLogoSrc;
+    const bundledLogoSrc = match?.logo
+      ? `${BUNDLED_LOGO_BASE}/${match.logo}.png?v=${VERSION}`
+      : null;
+    // Don't append ?v= to user-uploaded paths — they already have unique UUID names.
+    const logoSrc = store.logo_path || bundledLogoSrc;
 
     if (logoSrc) {
       const img = document.createElement("img");
       img.className = "tile-logo";
       img.src = logoSrc;
       img.alt = store.name;
-      img.onerror = () => img.replaceWith(this._buildInitials(store.name));
+
+      // Fallback chain: if user logo_path is broken, try the bundled logo.
+      let usedFallback = false;
+      img.onerror = () => {
+        if (!usedFallback && logoSrc !== bundledLogoSrc && bundledLogoSrc) {
+          usedFallback = true;
+          img.src = bundledLogoSrc;
+        } else {
+          img.replaceWith(this._buildInitials(store.name));
+        }
+      };
+
       img.onload = async () => {
         // Auto-compute dominant color from logo on first load this session
         if (this._autoColoredStores.has(store.id)) return;
         this._autoColoredStores.add(store.id);
-        const color = await dominantColor(logoSrc);
+        const effectiveSrc = usedFallback ? bundledLogoSrc : logoSrc;
+        const color = await dominantColor(effectiveSrc);
         if (!color) return;
         tile.style.background = color;
         // Persist only if the store is still using the default color
@@ -512,6 +536,7 @@ class LoyaltyCardsCard extends HTMLElement {
           }).catch(() => {});
         }
       };
+
       tile.appendChild(img);
     } else {
       tile.appendChild(this._buildInitials(store.name));
@@ -838,7 +863,7 @@ class LoyaltyCardsCard extends HTMLElement {
 
         const img = document.createElement("img");
         img.className = "store-picker-logo";
-        img.src = `/local/loyalty-cards/logos/${s.logo}.png?v=${VERSION}`;
+        img.src = `${BUNDLED_LOGO_BASE}/${s.logo}.png?v=${VERSION}`;
         img.alt = "";
         img.onerror = () => img.replaceWith(Object.assign(document.createElement("div"), {
           className: "store-picker-initials", textContent: initials(s.name),
@@ -895,7 +920,7 @@ class LoyaltyCardsCard extends HTMLElement {
     let color = this.shadowRoot.getElementById("store-color")?.value || "#1976d2";
     // For known stores, auto-derive tile color from the bundled logo
     if (isKnown && matchedStore?.logo) {
-      const computed = await dominantColor(`/local/loyalty-cards/logos/${matchedStore.logo}.png?v=${VERSION}`);
+      const computed = await dominantColor(`${BUNDLED_LOGO_BASE}/${matchedStore.logo}.png?v=${VERSION}`);
       if (computed) color = computed;
     }
     await this._hass.callService("loyalty_cards", "add_store", { name, category, tile_color: color });
