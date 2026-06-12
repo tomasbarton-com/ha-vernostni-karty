@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version (e.g. v0.1.2)"
+        description: "Version (e.g. v0.3.0)"
         required: true
 
 permissions:
@@ -37,6 +37,14 @@ jobs:
           git tag ${{ steps.ver.outputs.tag }} || true
           git push origin ${{ steps.ver.outputs.tag }} || true
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build card JS
+        run: npm ci && npm run build
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -45,16 +53,43 @@ jobs:
           body: |
             ## Věrnostní karty ${{ steps.ver.outputs.tag }}
 
-            ### Instalace přes HACS
+            Od verze 0.3.0 jsou **integrace** a **ovládací panel** odděleny a instalují se zvlášť.
+
+            ---
+
+            ### 1. Instalace integrace (backend)
+
+            Přes HACS jako vlastní repozitář:
             1. HACS → Integrace → tři tečky → Vlastní repozitáře
-            2. Přidejte `https://github.com/tomasbarton-com/ha-vernostni-karty`
+            2. Přidejte `https://github.com/tomasbarton-com/ha-vernostni-karty` jako typ **Integrace**
             3. Nainstalujte „Věrnostní karty" a restartujte HA
 
-            ### Přidání karty do dashboardu
+            ---
+
+            ### 2. Instalace ovládacího panelu (Lovelace karta)
+
+            Karta se instaluje samostatně jako Lovelace zdroj:
+
+            **Možnost A – přes HACS (frontend plugin):**
+            1. HACS → Frontend → tři tečky → Vlastní repozitáře
+            2. Přidejte `https://github.com/tomasbarton-com/ha-vernostni-karty` jako typ **Lovelace**
+            3. Nainstalujte „Věrnostní karty – karta"
+
+            **Možnost B – ručně:**
+            1. Stáhněte `loyalty-cards-card.js` z tohoto release
+            2. Umístěte do `/config/www/loyalty-cards/loyalty-cards-card.js`
+            3. Nastavení → Dashboardy → Zdroje → Přidat zdroj:
+               - URL: `/local/loyalty-cards/loyalty-cards-card.js`
+               - Typ: JavaScript modul
+
+            ---
+
+            ### 3. Přidání karty do dashboardu
+
             ```yaml
             type: custom:loyalty-cards-card
             ```
           files: |
-            custom_components/loyalty_cards/www/loyalty-cards-card.js
+            www/loyalty-cards/loyalty-cards-card.js
             icon.png
           make_latest: true

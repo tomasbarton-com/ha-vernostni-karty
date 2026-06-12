@@ -2,7 +2,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 
-const VERSION = "0.2.9";
+const VERSION = "0.3.0";
 
 // Bundled logos are copied to /config/www/loyalty-cards/logos/ on every integration
 // setup, so they are served at /local/loyalty-cards/logos/.
