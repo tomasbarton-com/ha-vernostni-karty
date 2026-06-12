@@ -223,6 +223,21 @@ const STYLES = `
                      border-bottom:1px solid var(--divider-color,#eee); color:var(--primary-text-color); }
   .loc-result-item:last-child { border-bottom:none; }
   .loc-result-item:hover { background:var(--secondary-background-color,#f5f5f5); }
+
+  /* Store picker */
+  .store-picker-list { border:1px solid var(--divider-color,#ccc); border-radius:6px; max-height:240px;
+                       overflow-y:auto; margin-top:4px; background:var(--card-background-color,#fff); }
+  .store-picker-item { display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer;
+                       border-bottom:1px solid var(--divider-color,#eee); font-size:0.88em;
+                       color:var(--primary-text-color); }
+  .store-picker-item:last-child { border-bottom:none; }
+  .store-picker-item:hover { background:var(--secondary-background-color,#f0f0f0); }
+  .store-picker-item.selected { background:var(--primary-color,#1976d2); color:#fff; }
+  .store-picker-logo { width:28px; height:28px; border-radius:4px; object-fit:contain; flex-shrink:0;
+                       background:rgba(255,255,255,.85); padding:2px; }
+  .store-picker-initials { width:28px; height:28px; border-radius:4px; display:flex; align-items:center;
+                           justify-content:center; font-size:0.65em; font-weight:700; flex-shrink:0;
+                           background:rgba(0,0,0,.15); }
 `;
 
 // ── Main custom element ───────────────────────────────────────────────────────
@@ -240,6 +255,7 @@ class LoyaltyCardsCard extends HTMLElement {
     this._proximityTimer = {};
     this._notificationSent = new Set();
     this._logoPending = new Set();
+    this._lastDataKey = null;
   }
 
   set hass(hass) {
@@ -340,6 +356,16 @@ class LoyaltyCardsCard extends HTMLElement {
   // ── Render ────────────────────────────────────────────────────────────────
   _render() {
     const root = this.shadowRoot;
+    // Smart diff: if data + tab unchanged, only update modal overlay (no tile flicker)
+    const dataKey = (this._data ? JSON.stringify(this._data) : "null") + "|" + this._activeTab;
+    if (this._lastDataKey !== null && this._lastDataKey === dataKey && root.querySelector(".card-root")) {
+      const existing = root.querySelector(".modal-overlay");
+      if (!this._modal && existing) { existing.remove(); return; }
+      if (this._modal && !existing) { root.appendChild(this._buildModalOverlay()); return; }
+      if (this._modal && existing) { existing.replaceWith(this._buildModalOverlay()); return; }
+      return;
+    }
+    this._lastDataKey = dataKey;
     root.innerHTML = "";
     const style = document.createElement("style");
     style.textContent = STYLES;
@@ -707,27 +733,6 @@ class LoyaltyCardsCard extends HTMLElement {
     mh.querySelector(".close-btn").addEventListener("click", () => this._closeModal());
     frag.appendChild(mh);
 
-    const storeGroup = this._makeField("Obchod", "");
-    const sel = document.createElement("select");
-    sel.id = "store-select";
-    sel.innerHTML = `<option value="">-- Vyberte nebo zadejte vlastní --</option>`;
-    const byCategory = {};
-    for (const s of CZECH_STORES) (byCategory[s.category] = byCategory[s.category] || []).push(s);
-    for (const [cat, stores] of Object.entries(byCategory)) {
-      const og = document.createElement("optgroup");
-      og.label = CATEGORY_LABELS[cat] || cat;
-      for (const s of stores) {
-        const opt = document.createElement("option");
-        opt.value = `${s.name}|${s.category}`;
-        opt.textContent = s.name;
-        og.appendChild(opt);
-      }
-      sel.appendChild(og);
-    }
-    sel.appendChild(Object.assign(document.createElement("option"), { value: "custom", textContent: "Jiný obchod…" }));
-    storeGroup.appendChild(sel);
-    frag.appendChild(storeGroup);
-
     const customFields = document.createElement("div");
     customFields.id = "custom-fields";
     customFields.className = "custom-fields";
@@ -738,9 +743,7 @@ class LoyaltyCardsCard extends HTMLElement {
         <select id="store-category">
           ${Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
         </select></div>`;
-    frag.appendChild(customFields);
 
-    // Logo upload only for custom stores
     const logoSection = document.createElement("div");
     logoSection.id = "logo-section";
     logoSection.style.display = "none";
@@ -752,6 +755,14 @@ class LoyaltyCardsCard extends HTMLElement {
         <input type="file" id="store-logo-file" accept="image/*" />
         <span id="store-logo-fn" class="hint"></span>
       </div>`;
+
+    const showCustom = (isCustom) => {
+      customFields.style.display = isCustom ? "block" : "none";
+      logoSection.style.display = isCustom ? "block" : "none";
+    };
+
+    frag.appendChild(this._buildStorePickerField(showCustom));
+    frag.appendChild(customFields);
     frag.appendChild(logoSection);
 
     frag.appendChild(this._makeField("Barva dlaždice", `
@@ -759,13 +770,6 @@ class LoyaltyCardsCard extends HTMLElement {
         <input type="color" id="store-color" value="#1976d2" />
         <span class="hint">Automaticky se upraví podle loga</span>
       </div>`));
-
-    sel.addEventListener("change", () => {
-      const v = sel.value;
-      const isCustom = v === "custom";
-      customFields.style.display = isCustom ? "block" : "none";
-      logoSection.style.display = isCustom ? "block" : "none";
-    });
 
     setTimeout(() => {
       const fi = this.shadowRoot.getElementById("store-logo-file");
@@ -796,10 +800,82 @@ class LoyaltyCardsCard extends HTMLElement {
     return frag;
   }
 
+  _buildStorePickerField(onSelect) {
+    const group = document.createElement("div");
+    group.className = "form-group";
+    const label = document.createElement("label");
+    label.textContent = "Obchod";
+    group.appendChild(label);
+
+    const filterInp = document.createElement("input");
+    filterInp.type = "text";
+    filterInp.id = "store-search";
+    filterInp.placeholder = "Vyhledat obchod…";
+    group.appendChild(filterInp);
+
+    const list = document.createElement("div");
+    list.className = "store-picker-list";
+
+    const buildItems = (query) => {
+      list.innerHTML = "";
+      const q = (query || "").toLowerCase();
+      const selectedVal = filterInp.dataset.selected || "";
+      const visible = q ? CZECH_STORES.filter(s => s.name.toLowerCase().includes(q)) : CZECH_STORES;
+
+      for (const s of visible) {
+        const val = `${s.name}|${s.category}`;
+        const item = document.createElement("div");
+        item.className = "store-picker-item" + (selectedVal === val ? " selected" : "");
+
+        const img = document.createElement("img");
+        img.className = "store-picker-logo";
+        img.src = `/local/loyalty-cards/logos/${s.logo}.png`;
+        img.alt = "";
+        img.onerror = () => img.replaceWith(Object.assign(document.createElement("div"), {
+          className: "store-picker-initials", textContent: initials(s.name),
+        }));
+
+        item.appendChild(img);
+        item.appendChild(Object.assign(document.createElement("span"), {
+          style: "flex:1;", textContent: s.name,
+        }));
+        item.appendChild(Object.assign(document.createElement("span"), {
+          style: "font-size:.72em;opacity:.65;", textContent: CATEGORY_LABELS[s.category] || "",
+        }));
+
+        item.addEventListener("click", () => {
+          filterInp.value = s.name;
+          filterInp.dataset.selected = val;
+          buildItems(filterInp.value);
+          onSelect(val, false);
+        });
+        list.appendChild(item);
+      }
+
+      // "Jiný obchod…" option
+      const customItem = document.createElement("div");
+      customItem.className = "store-picker-item" + (selectedVal === "custom" ? " selected" : "");
+      if (selectedVal !== "custom") customItem.style.color = "var(--primary-color,#1976d2)";
+      customItem.textContent = "+ Jiný obchod…";
+      customItem.addEventListener("click", () => {
+        filterInp.value = "";
+        filterInp.dataset.selected = "custom";
+        buildItems("");
+        onSelect("custom", true);
+      });
+      list.appendChild(customItem);
+    };
+
+    buildItems("");
+    filterInp.addEventListener("input", () => buildItems(filterInp.value));
+    group.appendChild(list);
+    return group;
+  }
+
   async _saveNewStore() {
-    const v = this.shadowRoot.getElementById("store-select")?.value;
+    const v = this.shadowRoot.getElementById("store-search")?.dataset?.selected || "";
     let name, category, isKnown = false;
-    if (v && v !== "custom" && v !== "") {
+    if (v && v !== "custom") {
       const found = CZECH_STORES.find(s => `${s.name}|${s.category}` === v);
       name = found?.name; category = found?.category; isKnown = true;
     } else {
