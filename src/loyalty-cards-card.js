@@ -2,6 +2,8 @@ import { Html5Qrcode } from "html5-qrcode";
 import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 
+const VERSION = "0.2.5";
+
 // ── Store database ────────────────────────────────────────────────────────────
 const CZECH_STORES = [
   { name: "Albert",              category: "groceries",   logo: "albert",       logo_domain: "albert.cz" },
@@ -78,7 +80,8 @@ function initials(name) {
 async function dominantColor(src) {
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // No crossOrigin — HA's /local/ is same-origin; adding crossOrigin would
+    // trigger a CORS check that HA's static server doesn't satisfy, breaking canvas.
     img.onload = () => {
       try {
         const c = document.createElement("canvas"); c.width = 32; c.height = 32;
@@ -256,6 +259,7 @@ class LoyaltyCardsCard extends HTMLElement {
     this._proximityTimer = {};
     this._notificationSent = new Set();
     this._logoPending = new Set();
+    this._autoColoredStores = new Set();
     this._lastDataKey = null;
   }
 
@@ -485,8 +489,8 @@ class LoyaltyCardsCard extends HTMLElement {
 
     // Logo: prefer stored path, then bundled offline logo, then initials
     const match = CZECH_STORES.find(s => s.name === store.name);
-    const logoSrc = store.logo_path ||
-      (match?.logo ? `/local/loyalty-cards/logos/${match.logo}.png` : null);
+    const bundledLogoSrc = match?.logo ? `/local/loyalty-cards/logos/${match.logo}.png?v=${VERSION}` : null;
+    const logoSrc = store.logo_path ? `${store.logo_path}?v=${VERSION}` : bundledLogoSrc;
 
     if (logoSrc) {
       const img = document.createElement("img");
@@ -494,6 +498,20 @@ class LoyaltyCardsCard extends HTMLElement {
       img.src = logoSrc;
       img.alt = store.name;
       img.onerror = () => img.replaceWith(this._buildInitials(store.name));
+      img.onload = async () => {
+        // Auto-compute dominant color from logo on first load this session
+        if (this._autoColoredStores.has(store.id)) return;
+        this._autoColoredStores.add(store.id);
+        const color = await dominantColor(logoSrc);
+        if (!color) return;
+        tile.style.background = color;
+        // Persist only if the store is still using the default color
+        if (!store.tile_color || store.tile_color === "#1976d2") {
+          this._hass?.callService("loyalty_cards", "update_store", {
+            store_id: store.id, tile_color: color,
+          }).catch(() => {});
+        }
+      };
       tile.appendChild(img);
     } else {
       tile.appendChild(this._buildInitials(store.name));
@@ -820,7 +838,7 @@ class LoyaltyCardsCard extends HTMLElement {
 
         const img = document.createElement("img");
         img.className = "store-picker-logo";
-        img.src = `/local/loyalty-cards/logos/${s.logo}.png`;
+        img.src = `/local/loyalty-cards/logos/${s.logo}.png?v=${VERSION}`;
         img.alt = "";
         img.onerror = () => img.replaceWith(Object.assign(document.createElement("div"), {
           className: "store-picker-initials", textContent: initials(s.name),
@@ -865,16 +883,21 @@ class LoyaltyCardsCard extends HTMLElement {
 
   async _saveNewStore() {
     const v = this.shadowRoot.getElementById("store-search")?.dataset?.selected || "";
-    let name, category, isKnown = false;
+    let name, category, isKnown = false, matchedStore = null;
     if (v && v !== "custom") {
-      const found = CZECH_STORES.find(s => `${s.name}|${s.category}` === v);
-      name = found?.name; category = found?.category; isKnown = true;
+      matchedStore = CZECH_STORES.find(s => `${s.name}|${s.category}` === v);
+      name = matchedStore?.name; category = matchedStore?.category; isKnown = true;
     } else {
       name = this.shadowRoot.getElementById("store-name")?.value?.trim();
       category = this.shadowRoot.getElementById("store-category")?.value || "other";
     }
     if (!name) { alert("Zadejte nebo vyberte název obchodu."); return; }
-    const color = this.shadowRoot.getElementById("store-color")?.value || "#1976d2";
+    let color = this.shadowRoot.getElementById("store-color")?.value || "#1976d2";
+    // For known stores, auto-derive tile color from the bundled logo
+    if (isKnown && matchedStore?.logo) {
+      const computed = await dominantColor(`/local/loyalty-cards/logos/${matchedStore.logo}.png?v=${VERSION}`);
+      if (computed) color = computed;
+    }
     await this._hass.callService("loyalty_cards", "add_store", { name, category, tile_color: color });
 
     if (!isKnown) {
