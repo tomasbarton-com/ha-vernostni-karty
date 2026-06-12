@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Downloads store logos from Clearbit and saves them as PNG files
+// Downloads store logos and saves them as PNG files
+// Sources tried in order: Brandfetch CDN, Google Favicons
 const https = require('https');
 const http = require('http');
 const fs = require('fs');
@@ -29,14 +30,22 @@ const STORES = [
 const OUT_DIR = path.join(__dirname, '..', 'custom_components', 'loyalty_cards', 'www', 'logos');
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
-function fetchUrl(url, redirects = 5) {
+function fetchUrl(url, redirects = 8) {
   return new Promise((resolve, reject) => {
     if (redirects === 0) { reject(new Error('Too many redirects')); return; }
     const lib = url.startsWith('https') ? https : http;
-    const req = lib.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
+    const req = lib.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; logo-fetcher/1.0)',
+        'Accept': 'image/png,image/jpeg,image/webp,image/*',
+      }
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
-        return fetchUrl(res.headers.location, redirects - 1).then(resolve).catch(reject);
+        const next = res.headers.location.startsWith('http')
+          ? res.headers.location
+          : new URL(res.headers.location, url).href;
+        return fetchUrl(next, redirects - 1).then(resolve).catch(reject);
       }
       if (res.statusCode !== 200) {
         res.resume();
@@ -48,11 +57,20 @@ function fetchUrl(url, redirects = 5) {
       res.on('end', () => resolve(Buffer.concat(chunks)));
     });
     req.on('error', reject);
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout')); });
   });
 }
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function sourceUrls(domain) {
+  return [
+    // Brandfetch CDN – high quality logos
+    `https://cdn.brandfetch.io/${domain}/w/400/h/400`,
+    // Google Favicons – reliable fallback, smaller but decent
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+  ];
+}
 
 async function main() {
   let ok = 0, skip = 0, fail = 0;
@@ -63,17 +81,26 @@ async function main() {
       skip++;
       continue;
     }
-    try {
-      const data = await fetchUrl(`https://logo.clearbit.com/${domain}`);
-      if (data.length < 200) throw new Error('Response too small');
-      fs.writeFileSync(outFile, data);
-      process.stdout.write(`OK   ${key} (${data.length} B)\n`);
-      ok++;
-    } catch (e) {
-      process.stdout.write(`FAIL ${key} (${domain}): ${e.message}\n`);
+    let downloaded = false;
+    for (const url of sourceUrls(domain)) {
+      try {
+        const data = await fetchUrl(url);
+        if (data.length < 200) throw new Error('Response too small');
+        fs.writeFileSync(outFile, data);
+        process.stdout.write(`OK   ${key} via ${new URL(url).hostname} (${data.length} B)\n`);
+        ok++;
+        downloaded = true;
+        break;
+      } catch (e) {
+        process.stdout.write(`     ${key} ${new URL(url).hostname}: ${e.message}\n`);
+      }
+      await sleep(200);
+    }
+    if (!downloaded) {
+      process.stdout.write(`FAIL ${key} (${domain}): all sources failed\n`);
       fail++;
     }
-    await sleep(400);
+    await sleep(300);
   }
   process.stdout.write(`\nDone: ${ok} downloaded, ${skip} skipped, ${fail} failed\n`);
 }
