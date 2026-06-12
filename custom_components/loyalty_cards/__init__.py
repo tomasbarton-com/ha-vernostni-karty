@@ -65,9 +65,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         dst = dst_dir / "loyalty-cards-card.js"
         await hass.async_add_executor_job(shutil.copy2, str(src), str(dst))
         _LOGGER.debug("Deployed Lovelace card to %s", dst)
-        add_extra_js_url(hass, f"/local/loyalty-cards/loyalty-cards-card.js?v={_VERSION}")
+        # mtime-based cache busting: URL changes whenever the file changes
+        mtime = int(src.stat().st_mtime)
+        add_extra_js_url(hass, f"/local/loyalty-cards/loyalty-cards-card.js?v={_VERSION}&t={mtime}")
     else:
         _LOGGER.error("loyalty-cards-card.js not found at %s", src)
+
+    # Deploy bundled store logos so they are served at /local/loyalty-cards/logos/
+    logos_src = Path(__file__).parent / "www" / "logos"
+    if logos_src.is_dir():
+        logos_dst = Path(hass.config.path("www", "loyalty-cards", "logos"))
+        await hass.async_add_executor_job(_sync_logos, logos_src, logos_dst)
+        _LOGGER.debug("Deployed store logos to %s", logos_dst)
 
     _register_services(hass, store)
     _register_websocket(hass, store)
@@ -92,6 +101,17 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].pop("store", None)
     return True
+
+
+def _sync_logos(src_dir: Path, dst_dir: Path) -> None:
+    """Copy new/changed logos from integration package to /config/www/."""
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    for logo_file in src_dir.iterdir():
+        if not logo_file.is_file():
+            continue
+        dst_file = dst_dir / logo_file.name
+        if not dst_file.exists() or dst_file.stat().st_mtime < logo_file.stat().st_mtime:
+            shutil.copy2(str(logo_file), str(dst_file))
 
 
 def _fire_updated(hass: HomeAssistant) -> None:
