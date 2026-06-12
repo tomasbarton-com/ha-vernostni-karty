@@ -33,21 +33,49 @@ _VERSION = json.loads(
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-# JS is copied to /config/www/loyalty-cards/ on every setup so /local/ serves it.
-# Version in URL ensures browser re-fetches after integration updates.
-_CARD_URL = f"/local/loyalty-cards/loyalty-cards-card.js?v={_VERSION}"
-_CARD_URL_PREFIX = "/local/loyalty-cards/loyalty-cards-card.js"
+_CARD_JS_NAME = "loyalty-cards-card.js"
+_CARD_URL = f"/local/loyalty-cards/{_CARD_JS_NAME}?v={_VERSION}"
+_CARD_URL_PREFIX = f"/local/loyalty-cards/{_CARD_JS_NAME}"
 
-# Storage key used by HA's Lovelace component for UI-managed resources.
-_LOVELACE_RESOURCES_KEY = "lovelace_resources"
+# Legacy URL prefix from older versions — cleaned up on registration.
+_LEGACY_URL_PREFIX = "/loyalty_cards_www/loyalty-cards-card.js"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Called ONCE per HA session (not on integration reload).
+
+    Card JS deployment and resource registration live here so they are
+    independent of integration reload.  async_setup_entry handles only
+    the data layer (store, services, logos).
+    """
     hass.data.setdefault(DOMAIN, {})
+
+    # Deploy card JS immediately so the file exists before Lovelace renders.
+    await hass.async_add_executor_job(_deploy_card_js, hass)
+
+    # add_extra_js_url called ONCE here — never in async_setup_entry.
+    # Calling it there accumulated duplicate URLs in UrlManager across reloads.
+    add_extra_js_url(hass, _CARD_URL)
+
+    # Write to Lovelace resource storage so the card loads before the dashboard
+    # renders on page refresh (fixes "Custom element doesn't exist").
+    async def _register(_event=None):
+        await _async_register_lovelace_resource(hass, _CARD_URL)
+
+    if hass.is_running:
+        await _register()
+    else:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _register)
+
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Called on every setup and reload.
+
+    Only handles data: store, settings, services, logos.
+    Card JS registration is NOT touched here — it lives in async_setup.
+    """
     store = LoyaltyCardStore(hass)
     await store.async_load()
 
@@ -62,25 +90,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN]["store"] = store
 
-    # Copy JS and logos to /config/www/loyalty-cards/ so HA serves them at /local/.
-    # This runs on every setup/reload, ensuring files are always current.
+    # Re-deploy JS + logos on every reload so integration updates are picked up
+    # without a full HA restart.
     await hass.async_add_executor_job(_deploy_www, hass)
-
-    # Register the card URL for the current session.
-    # Clean up accumulated stale entries first to prevent double-loading.
-    _cleanup_extra_module_urls(hass)
-    add_extra_js_url(hass, _CARD_URL)
-
-    # Register in Lovelace resource storage so the card loads before
-    # the dashboard renders (fixes "Custom element doesn't exist").
-    # Run after HA is fully started so lovelace data is available.
-    async def _register(_event=None):
-        await _async_register_lovelace_resource(hass, _CARD_URL)
-
-    if hass.is_running:
-        await _register()
-    else:
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _register)
 
     _register_services(hass, store)
     _register_websocket(hass, store)
@@ -88,15 +100,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _deploy_card_js(hass: HomeAssistant) -> None:
+    """Copy only the card JS to /config/www/loyalty-cards/ (blocking)."""
+    src = Path(__file__).parent / "www" / _CARD_JS_NAME
+    dst_dir = Path(hass.config.path("www", "loyalty-cards"))
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    if src.exists():
+        shutil.copy2(str(src), str(dst_dir / _CARD_JS_NAME))
+
+
 def _deploy_www(hass: HomeAssistant) -> None:
-    """Copy JS and bundled logos to /config/www/loyalty-cards/ (blocking)."""
+    """Copy card JS and bundled logos to /config/www/loyalty-cards/ (blocking)."""
     src_www = Path(__file__).parent / "www"
     dst_www = Path(hass.config.path("www", "loyalty-cards"))
     dst_www.mkdir(parents=True, exist_ok=True)
 
-    js = src_www / "loyalty-cards-card.js"
+    js = src_www / _CARD_JS_NAME
     if js.exists():
-        shutil.copy2(str(js), str(dst_www / "loyalty-cards-card.js"))
+        shutil.copy2(str(js), str(dst_www / _CARD_JS_NAME))
 
     src_logos = src_www / "logos"
     if src_logos.is_dir():
@@ -105,54 +126,19 @@ def _deploy_www(hass: HomeAssistant) -> None:
         for f in src_logos.iterdir():
             if f.is_file():
                 dst = dst_logos / f.name
-                # Copy only when source is newer (avoids 50 × disk writes on every reload)
                 if not dst.exists() or f.stat().st_mtime > dst.stat().st_mtime:
                     shutil.copy2(str(f), str(dst))
 
 
-def _cleanup_extra_module_urls(hass: HomeAssistant) -> None:
-    """Remove all our stale card URLs to prevent duplicate module loading.
-
-    HA 2024.x stores extra module URLs in a UrlManager (with .urls frozenset
-    and .remove()), older versions used a plain list.
-    """
-    url_manager = hass.data.get("frontend_extra_module_url")
-    if url_manager is None:
-        return
-
-    # Prefer .urls attribute (UrlManager); fall back to treating object as iterable
-    try:
-        urls_iter = url_manager.urls if hasattr(url_manager, "urls") else list(url_manager)
-    except TypeError:
-        return
-
-    stale = [
-        u for u in urls_iter
-        if any(u.startswith(p) for p in (
-            "/local/loyalty-cards/loyalty-cards-card.js",
-            "/loyalty_cards_www/loyalty-cards-card.js",
-        ))
-    ]
-    for u in stale:
-        try:
-            if hasattr(url_manager, "remove"):
-                url_manager.remove(u)
-            else:
-                url_manager.remove(u)  # list.remove
-        except (ValueError, KeyError):
-            pass
-
-
 async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> None:
-    """Ensure our card is in Lovelace resources for reliable pre-render loading.
+    """Ensure our card URL is in Lovelace resources (in-memory + storage).
 
-    Uses the in-memory ResourceStorageCollection when available (storage UI mode)
-    and also writes directly to the storage file so the entry survives HA restarts.
-    Falls back gracefully for YAML-mode Lovelace (add_extra_js_url covers that case).
+    Method A covers the current HA session; Method B persists across restarts.
+    Both clean up any stale URLs from previous integration versions.
     """
     registered = False
 
-    # ── Method A: in-memory collection (current session) ──────────────────────
+    # ── Method A: in-memory ResourceStorageCollection ─────────────────────────
     try:
         lovelace = hass.data.get("lovelace")
         resources = (lovelace or {}).get("resources")
@@ -160,13 +146,10 @@ async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> No
             if not getattr(resources, "loaded", True):
                 await resources.async_load()
 
-            items = list(resources.async_items())
             found = False
-            for item in items:
+            for item in list(resources.async_items()):
                 item_url = item.get("url", "")
-                if item_url.startswith(_CARD_URL_PREFIX) or item_url.startswith(
-                    "/loyalty_cards_www/loyalty-cards-card.js"
-                ):
+                if item_url.startswith(_CARD_URL_PREFIX) or item_url.startswith(_LEGACY_URL_PREFIX):
                     if item_url == url:
                         found = True
                     else:
@@ -179,34 +162,26 @@ async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> No
     except Exception as err:
         _LOGGER.debug("In-memory Lovelace registration failed: %s", err)
 
-    # ── Method B: direct storage write (persists across restarts) ─────────────
-    # Even when Method A succeeds, the storage file may not be updated until the
-    # collection saves on its own schedule.  Writing here guarantees the entry
-    # survives the next HA restart so the card loads before the dashboard renders.
+    # ── Method B: storage file (survives HA restarts) ─────────────────────────
     try:
         from homeassistant.helpers.storage import Store
 
-        store = Store(hass, version=1, key=_LOVELACE_RESOURCES_KEY)
+        store = Store(hass, version=1, key="lovelace_resources")
         data = await store.async_load()
 
         if data is None:
-            # File doesn't exist yet; only create it when in-memory failed too,
-            # otherwise the collection will create/manage it on its own.
             if not registered:
                 data = {"items": []}
             else:
-                _LOGGER.debug(
-                    "Lovelace storage file absent; in-memory registration is sufficient"
-                )
+                _LOGGER.debug("Lovelace storage absent; in-memory registration sufficient")
                 return
 
         items: list[dict] = data.get("items", [])
-
         clean = [
-            item for item in items
+            i for i in items
             if not (
-                item.get("url", "").startswith(_CARD_URL_PREFIX)
-                or item.get("url", "").startswith("/loyalty_cards_www/loyalty-cards-card.js")
+                i.get("url", "").startswith(_CARD_URL_PREFIX)
+                or i.get("url", "").startswith(_LEGACY_URL_PREFIX)
             )
         ]
         already_correct = any(i.get("url") == url for i in items)
