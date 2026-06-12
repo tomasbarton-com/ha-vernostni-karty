@@ -2,6 +2,14 @@ import { Html5Qrcode } from "html5-qrcode";
 import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 
+const VERSION = "0.2.8";
+
+// Bundled logos are copied to /config/www/loyalty-cards/logos/ on every integration
+// setup, so they are served at /local/loyalty-cards/logos/.
+// User-uploaded logos (store.logo_path) are also served from /local/loyalty-cards/logos/
+// but named by store UUID, not store key.
+const BUNDLED_LOGO_BASE = "/local/loyalty-cards/logos";
+
 // ── Store database ────────────────────────────────────────────────────────────
 const CZECH_STORES = [
   { name: "Albert",              category: "groceries",   logo: "albert",       logo_domain: "albert.cz" },
@@ -78,7 +86,8 @@ function initials(name) {
 async function dominantColor(src) {
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // No crossOrigin — HA's /local/ is same-origin; adding crossOrigin would
+    // trigger a CORS check that HA's static server doesn't satisfy, breaking canvas.
     img.onload = () => {
       try {
         const c = document.createElement("canvas"); c.width = 32; c.height = 32;
@@ -223,6 +232,22 @@ const STYLES = `
                      border-bottom:1px solid var(--divider-color,#eee); color:var(--primary-text-color); }
   .loc-result-item:last-child { border-bottom:none; }
   .loc-result-item:hover { background:var(--secondary-background-color,#f5f5f5); }
+  [hidden] { display: none !important; }
+
+  /* Store picker */
+  .store-picker-list { border:1px solid var(--divider-color,#ccc); border-radius:6px; max-height:240px;
+                       overflow-y:auto; margin-top:4px; background:var(--card-background-color,#fff); }
+  .store-picker-item { display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer;
+                       border-bottom:1px solid var(--divider-color,#eee); font-size:0.88em;
+                       color:var(--primary-text-color); }
+  .store-picker-item:last-child { border-bottom:none; }
+  .store-picker-item:hover { background:var(--secondary-background-color,#f0f0f0); }
+  .store-picker-item.selected { background:var(--primary-color,#1976d2); color:#fff; }
+  .store-picker-logo { width:28px; height:28px; border-radius:4px; object-fit:contain; flex-shrink:0;
+                       background:rgba(255,255,255,.85); padding:2px; }
+  .store-picker-initials { width:28px; height:28px; border-radius:4px; display:flex; align-items:center;
+                           justify-content:center; font-size:0.65em; font-weight:700; flex-shrink:0;
+                           background:rgba(0,0,0,.15); }
 `;
 
 // ── Main custom element ───────────────────────────────────────────────────────
@@ -240,6 +265,8 @@ class LoyaltyCardsCard extends HTMLElement {
     this._proximityTimer = {};
     this._notificationSent = new Set();
     this._logoPending = new Set();
+    this._autoColoredStores = new Set();
+    this._lastDataKey = null;
   }
 
   set hass(hass) {
@@ -279,18 +306,8 @@ class LoyaltyCardsCard extends HTMLElement {
   }
 
   _autoDownloadLogos() {
-    if (!this._data?.stores || !this._hass) return;
-    for (const store of this._data.stores) {
-      if (store.logo_path) continue;
-      if (this._logoPending.has(store.id)) continue;
-      const match = CZECH_STORES.find(s => s.name === store.name);
-      if (!match?.logo_domain) continue;
-      this._logoPending.add(store.id);
-      this._hass.callService("loyalty_cards", "download_logo", {
-        store_id: store.id,
-        url: `https://logo.clearbit.com/${match.logo_domain}`,
-      }).catch(() => { this._logoPending.delete(store.id); });
-    }
+    // Bundled logos are served from /local/loyalty-cards/logos/{key}.png after HA restart.
+    // No external download needed.
   }
 
   _updateNearby() {
@@ -340,6 +357,16 @@ class LoyaltyCardsCard extends HTMLElement {
   // ── Render ────────────────────────────────────────────────────────────────
   _render() {
     const root = this.shadowRoot;
+    // Smart diff: if data + tab unchanged, only update modal overlay (no tile flicker)
+    const dataKey = (this._data ? JSON.stringify(this._data) : "null") + "|" + this._activeTab;
+    if (this._lastDataKey !== null && this._lastDataKey === dataKey && root.querySelector(".card-root")) {
+      const existing = root.querySelector(".modal-overlay");
+      if (!this._modal && existing) { existing.remove(); return; }
+      if (this._modal && !existing) { root.appendChild(this._buildModalOverlay()); return; }
+      if (this._modal && existing) { existing.replaceWith(this._buildModalOverlay()); return; }
+      return;
+    }
+    this._lastDataKey = dataKey;
     root.innerHTML = "";
     const style = document.createElement("style");
     style.textContent = STYLES;
@@ -466,17 +493,52 @@ class LoyaltyCardsCard extends HTMLElement {
       }));
     }
 
-    // Logo: prefer stored path, then bundled offline logo, then initials
+    // Logo resolution priority:
+    //  1. store.logo_path  – user-uploaded logo (UUID filename, /local/loyalty-cards/logos/)
+    //  2. bundled logo     – copied from integration www/logos/ to /local/loyalty-cards/logos/
+    //  3. initials         – colored div with store name initials
+    //
+    // If (1) fails (broken path from old Clearbit downloads), we try (2) automatically.
     const match = CZECH_STORES.find(s => s.name === store.name);
-    const logoSrc = store.logo_path ||
-      (match?.logo ? `/local/loyalty-cards/logos/${match.logo}.png` : null);
+    const bundledLogoSrc = match?.logo
+      ? `${BUNDLED_LOGO_BASE}/${match.logo}.png?v=${VERSION}`
+      : null;
+    const primaryLogoSrc = store.logo_path || bundledLogoSrc;
 
-    if (logoSrc) {
+    if (primaryLogoSrc) {
       const img = document.createElement("img");
       img.className = "tile-logo";
-      img.src = logoSrc;
+      img.src = primaryLogoSrc;
       img.alt = store.name;
-      img.onerror = () => img.replaceWith(this._buildInitials(store.name));
+
+      // Build ordered fallback list (deduplicated, non-null)
+      const fallbacks = [primaryLogoSrc, bundledLogoSrc].filter(
+        (u, i, a) => u && a.indexOf(u) === i
+      );
+      let fallbackIdx = 0;
+
+      img.onerror = () => {
+        fallbackIdx++;
+        if (fallbackIdx < fallbacks.length) {
+          img.src = fallbacks[fallbackIdx];
+        } else {
+          img.replaceWith(this._buildInitials(store.name));
+        }
+      };
+
+      img.onload = async () => {
+        if (this._autoColoredStores.has(store.id)) return;
+        this._autoColoredStores.add(store.id);
+        const color = await dominantColor(img.src);
+        if (!color) return;
+        tile.style.background = color;
+        if (!store.tile_color || store.tile_color === "#1976d2") {
+          this._hass?.callService("loyalty_cards", "update_store", {
+            store_id: store.id, tile_color: color,
+          }).catch(() => {});
+        }
+      };
+
       tile.appendChild(img);
     } else {
       tile.appendChild(this._buildInitials(store.name));
@@ -707,43 +769,20 @@ class LoyaltyCardsCard extends HTMLElement {
     mh.querySelector(".close-btn").addEventListener("click", () => this._closeModal());
     frag.appendChild(mh);
 
-    const storeGroup = this._makeField("Obchod", "");
-    const sel = document.createElement("select");
-    sel.id = "store-select";
-    sel.innerHTML = `<option value="">-- Vyberte nebo zadejte vlastní --</option>`;
-    const byCategory = {};
-    for (const s of CZECH_STORES) (byCategory[s.category] = byCategory[s.category] || []).push(s);
-    for (const [cat, stores] of Object.entries(byCategory)) {
-      const og = document.createElement("optgroup");
-      og.label = CATEGORY_LABELS[cat] || cat;
-      for (const s of stores) {
-        const opt = document.createElement("option");
-        opt.value = `${s.name}|${s.category}`;
-        opt.textContent = s.name;
-        og.appendChild(opt);
-      }
-      sel.appendChild(og);
-    }
-    sel.appendChild(Object.assign(document.createElement("option"), { value: "custom", textContent: "Jiný obchod…" }));
-    storeGroup.appendChild(sel);
-    frag.appendChild(storeGroup);
-
     const customFields = document.createElement("div");
     customFields.id = "custom-fields";
     customFields.className = "custom-fields";
-    customFields.style.display = "none";
+    customFields.hidden = true;
     customFields.innerHTML = `
       <div class="form-group"><label>Název obchodu</label><input type="text" id="store-name" placeholder="Název…" /></div>
       <div class="form-group"><label>Kategorie</label>
         <select id="store-category">
           ${Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
         </select></div>`;
-    frag.appendChild(customFields);
 
-    // Logo upload only for custom stores
     const logoSection = document.createElement("div");
     logoSection.id = "logo-section";
-    logoSection.style.display = "none";
+    logoSection.hidden = true;
     logoSection.innerHTML = `
       <div class="section-title">Logo (volitelné)</div>
       <div class="form-group"><input type="text" id="store-logo-url" placeholder="URL obrázku loga…" /></div>
@@ -752,6 +791,14 @@ class LoyaltyCardsCard extends HTMLElement {
         <input type="file" id="store-logo-file" accept="image/*" />
         <span id="store-logo-fn" class="hint"></span>
       </div>`;
+
+    const showCustom = (_val, isCustom) => {
+      customFields.hidden = !isCustom;
+      logoSection.hidden = !isCustom;
+    };
+
+    frag.appendChild(this._buildStorePickerField(showCustom));
+    frag.appendChild(customFields);
     frag.appendChild(logoSection);
 
     frag.appendChild(this._makeField("Barva dlaždice", `
@@ -759,13 +806,6 @@ class LoyaltyCardsCard extends HTMLElement {
         <input type="color" id="store-color" value="#1976d2" />
         <span class="hint">Automaticky se upraví podle loga</span>
       </div>`));
-
-    sel.addEventListener("change", () => {
-      const v = sel.value;
-      const isCustom = v === "custom";
-      customFields.style.display = isCustom ? "block" : "none";
-      logoSection.style.display = isCustom ? "block" : "none";
-    });
 
     setTimeout(() => {
       const fi = this.shadowRoot.getElementById("store-logo-file");
@@ -796,18 +836,97 @@ class LoyaltyCardsCard extends HTMLElement {
     return frag;
   }
 
+  _buildStorePickerField(onSelect) {
+    const group = document.createElement("div");
+    group.className = "form-group";
+    const label = document.createElement("label");
+    label.textContent = "Obchod";
+    group.appendChild(label);
+
+    const filterInp = document.createElement("input");
+    filterInp.type = "text";
+    filterInp.id = "store-search";
+    filterInp.placeholder = "Vyhledat obchod…";
+    group.appendChild(filterInp);
+
+    const list = document.createElement("div");
+    list.className = "store-picker-list";
+
+    const buildItems = (query) => {
+      list.innerHTML = "";
+      const q = (query || "").toLowerCase();
+      const selectedVal = filterInp.dataset.selected || "";
+      const visible = q ? CZECH_STORES.filter(s => s.name.toLowerCase().includes(q)) : CZECH_STORES;
+
+      for (const s of visible) {
+        const val = `${s.name}|${s.category}`;
+        const item = document.createElement("div");
+        item.className = "store-picker-item" + (selectedVal === val ? " selected" : "");
+
+        const img = document.createElement("img");
+        img.className = "store-picker-logo";
+        img.src = `${BUNDLED_LOGO_BASE}/${s.logo}.png?v=${VERSION}`;
+        img.alt = "";
+        img.onerror = () => img.replaceWith(Object.assign(document.createElement("div"), {
+          className: "store-picker-initials", textContent: initials(s.name),
+        }));
+
+        item.appendChild(img);
+        item.appendChild(Object.assign(document.createElement("span"), {
+          style: "flex:1;", textContent: s.name,
+        }));
+        item.appendChild(Object.assign(document.createElement("span"), {
+          style: "font-size:.72em;opacity:.65;", textContent: CATEGORY_LABELS[s.category] || "",
+        }));
+
+        item.addEventListener("click", () => {
+          filterInp.value = s.name;
+          filterInp.dataset.selected = val;
+          buildItems(filterInp.value);
+          onSelect(val, false);
+        });
+        list.appendChild(item);
+      }
+
+      // "Jiný obchod…" option
+      const customItem = document.createElement("div");
+      customItem.className = "store-picker-item" + (selectedVal === "custom" ? " selected" : "");
+      if (selectedVal !== "custom") customItem.style.color = "var(--primary-color,#1976d2)";
+      customItem.textContent = "+ Jiný obchod…";
+      customItem.addEventListener("click", () => {
+        filterInp.value = "";
+        filterInp.dataset.selected = "custom";
+        buildItems("");
+        onSelect("custom", true);
+      });
+      list.appendChild(customItem);
+    };
+
+    buildItems("");
+    filterInp.addEventListener("input", () => buildItems(filterInp.value));
+    group.appendChild(list);
+    return group;
+  }
+
   async _saveNewStore() {
-    const v = this.shadowRoot.getElementById("store-select")?.value;
-    let name, category, isKnown = false;
-    if (v && v !== "custom" && v !== "") {
-      const found = CZECH_STORES.find(s => `${s.name}|${s.category}` === v);
-      name = found?.name; category = found?.category; isKnown = true;
+    const v = this.shadowRoot.getElementById("store-search")?.dataset?.selected || "";
+    let name, category, isKnown = false, matchedStore = null;
+    if (v && v !== "custom") {
+      matchedStore = CZECH_STORES.find(s => `${s.name}|${s.category}` === v);
+      name = matchedStore?.name; category = matchedStore?.category; isKnown = true;
     } else {
       name = this.shadowRoot.getElementById("store-name")?.value?.trim();
       category = this.shadowRoot.getElementById("store-category")?.value || "other";
     }
     if (!name) { alert("Zadejte nebo vyberte název obchodu."); return; }
-    const color = this.shadowRoot.getElementById("store-color")?.value || "#1976d2";
+    let color = this.shadowRoot.getElementById("store-color")?.value || "#1976d2";
+    // For known stores, auto-derive tile color from the bundled logo
+    if (isKnown && matchedStore?.logo) {
+      const computed = await dominantColor(
+        `${BUNDLED_LOGO_BASE}/${matchedStore.logo}.png?v=${VERSION}`
+      );
+      if (computed) color = computed;
+    }
     await this._hass.callService("loyalty_cards", "add_store", { name, category, tile_color: color });
 
     if (!isKnown) {
