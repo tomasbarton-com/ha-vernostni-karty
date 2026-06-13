@@ -1,0 +1,18 @@
+name: Cleanup branches
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old branches
+        run: |
+          gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/claude/control-panel-integration-v0.3-iccl6p || true
+          gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/claude/hass-loyalty-cards-0qetbf || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
