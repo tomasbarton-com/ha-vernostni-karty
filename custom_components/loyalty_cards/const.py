@@ -19,6 +19,7 @@ CATEGORIES = [
     "sport",
     "fashion",
     "fastfood",
+    "toys",
     "other",
 ]
 
@@ -41,5 +42,6 @@ WS_TYPE_GET_STORES = "loyalty_cards/get_stores"
 
 EVENT_DATA_UPDATED = "loyalty_cards_updated"
 
-LOGO_DIR = "www/loyalty-cards/logos"
-JS_RESOURCE_URL = "/local/loyalty-cards/loyalty-cards-card.js"
+BUNDLED_LOGO_DIR = "www/loyalty-cards/logos"
+USER_LOGO_DIR = "image/loyalty-card-logos"
+USER_LOGO_URL_PREFIX = "/loyalty-card-logos"

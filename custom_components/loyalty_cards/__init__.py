@@ -49,6 +49,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.async_add_executor_job(_deploy_logos, hass)
 
+    hass.http.register_static_path(
+        "/loyalty-card-logos",
+        hass.config.path("image", "loyalty-card-logos"),
+        cache_headers=False,
+    )
+
     _register_services(hass, store)
     _register_websocket(hass, store)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -56,17 +62,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 def _deploy_logos(hass: HomeAssistant) -> None:
-    """Copy bundled logos to /config/www/loyalty-cards/logos/ (blocking)."""
+    """Copy bundled logos to /config/www/loyalty-cards/logos/ — always overwrite."""
     src_logos = Path(__file__).parent / "www" / "logos"
-    if not src_logos.is_dir():
-        return
     dst_logos = Path(hass.config.path("www", "loyalty-cards", "logos"))
     dst_logos.mkdir(parents=True, exist_ok=True)
-    for f in src_logos.iterdir():
-        if f.is_file():
-            dst = dst_logos / f.name
-            if not dst.exists() or f.stat().st_mtime > dst.stat().st_mtime:
-                shutil.copy2(str(f), str(dst))
+    if src_logos.is_dir():
+        for f in src_logos.iterdir():
+            if f.is_file():
+                shutil.copy2(str(f), str(dst_logos / f.name))
+    # Ensure user logo directory exists for static path registration
+    Path(hass.config.path("image", "loyalty-card-logos")).mkdir(parents=True, exist_ok=True)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

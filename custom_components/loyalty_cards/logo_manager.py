@@ -16,11 +16,7 @@ MAX_LOGO_BYTES = 2 * 1024 * 1024  # 2 MB
 
 
 def _logo_dir(hass: HomeAssistant) -> Path:
-    return Path(hass.config.path("www/loyalty-cards/logos"))
-
-
-def logo_url(store_id: str) -> str:
-    return f"/local/loyalty-cards/logos/{store_id}.png"
+    return Path(hass.config.path("image", "loyalty-card-logos"))
 
 
 def _ext_from_mime(mime: str) -> str:
@@ -61,7 +57,7 @@ async def async_download_logo(hass: HomeAssistant, store_id: str, url: str) -> s
                 dest = logo_dir / f"{store_id}{ext}"
                 dest.write_bytes(data)
                 _LOGGER.debug("Logo saved to %s", dest)
-                return f"/local/loyalty-cards/logos/{store_id}{ext}"
+                return f"/loyalty-card-logos/{store_id}{ext}"
     except Exception:
         _LOGGER.exception("Error downloading logo for store %s", store_id)
         return None
@@ -101,7 +97,7 @@ async def async_save_logo_base64(
 
     await asyncio.get_event_loop().run_in_executor(None, _write)
     _LOGGER.debug("Logo saved from upload to %s", dest)
-    return f"/local/loyalty-cards/logos/{store_id}{ext}"
+    return f"/loyalty-card-logos/{store_id}{ext}"
 
 
 async def async_delete_logo(hass: HomeAssistant, store_id: str) -> bool:
