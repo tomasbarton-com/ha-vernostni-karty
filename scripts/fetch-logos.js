@@ -92,6 +92,9 @@ function sourceUrls(domain) {
     // Favicon.im – free favicon CDN
     `https://favicon.im/${domain}?larger=true`,
     `https://favicon.im/${domain}`,
+    // Direct from website as last resort
+    `https://www.${domain}/favicon.ico`,
+    `https://${domain}/favicon.ico`,
   ];
 }
 
