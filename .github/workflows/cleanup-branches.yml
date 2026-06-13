@@ -5,13 +5,15 @@ on:
 
 permissions:
   contents: write
+  administration: write
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete old branch
+      - name: Set main as default branch and delete old branch
         run: |
+          gh api -X PATCH repos/${{ github.repository }} -f default_branch=main
           gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/claude/hass-loyalty-cards-0qetbf || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
