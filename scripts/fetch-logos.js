@@ -25,6 +25,7 @@ const STORES = [
   ['ikea', 'ikea.cz'], ['okay', 'okay.cz'], ['kika', 'kika-home.cz'],
   ['zoot', 'zoot.cz'], ['tchibo', 'tchibo.cz'], ['action', 'action.com'],
   ['flyingtiger', 'flyingtiger.com'],
+  ['sparkys', 'sparkys.cz'], ['bambule', 'bambule.cz'], ['hamleys', 'hamleys.cz'],
 ];
 
 const OUT_DIR = path.join(__dirname, '..', 'custom_components', 'loyalty_cards', 'www', 'logos');

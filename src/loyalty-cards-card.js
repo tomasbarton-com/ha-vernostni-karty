@@ -46,6 +46,7 @@ const CZECH_STORES = [
   { name: "Deichmann",           category: "fashion",     logo: "deichmann",    logo_domain: "deichmann.com" },
   { name: "New Yorker",          category: "fashion",     logo: "newyorker",    logo_domain: "newyorker.de" },
   { name: "Pepco",               category: "fashion",     logo: "pepco",        logo_domain: "pepco.com" },
+  { name: "KIK",                 category: "fashion",     logo: "kik",          logo_domain: "kik.cz" },
   { name: "McDonald's",          category: "fastfood",    logo: "mcdonalds",    logo_domain: "mcdonalds.cz" },
   { name: "KFC",                 category: "fastfood",    logo: "kfc",          logo_domain: "kfc.cz" },
   { name: "Burger King",         category: "fastfood",    logo: "burgerking",   logo_domain: "burgerking.cz" },
@@ -56,17 +57,20 @@ const CZECH_STORES = [
   { name: "Bageterie Boulevard", category: "fastfood",    logo: "bageterie",    logo_domain: "bageterie.com" },
   { name: "IKEA",                category: "other",       logo: "ikea",         logo_domain: "ikea.cz" },
   { name: "Okay",                category: "other",       logo: "okay",         logo_domain: "okay.cz" },
-  { name: "Kika",                category: "other",       logo: "kika",         logo_domain: "kika.cz" },
+  { name: "Kika",                category: "other",       logo: "kika",         logo_domain: "kika-home.cz" },
   { name: "Zoot",                category: "other",       logo: "zoot",         logo_domain: "zoot.cz" },
   { name: "Tchibo",              category: "other",       logo: "tchibo",       logo_domain: "tchibo.cz" },
   { name: "Action",              category: "other",       logo: "action",       logo_domain: "action.com" },
   { name: "Flying Tiger",        category: "other",       logo: "flyingtiger",  logo_domain: "flyingtiger.com" },
+  { name: "Sparkys",             category: "toys",        logo: "sparkys",      logo_domain: "sparkys.cz" },
+  { name: "Bambule",             category: "toys",        logo: "bambule",      logo_domain: "bambule.cz" },
+  { name: "Hamleys",             category: "toys",        logo: "hamleys",      logo_domain: "hamleys.cz" },
 ];
 
 const CATEGORY_LABELS = {
   groceries: "Potraviny", drugstore: "Drogerie", pharmacy: "Lékárna",
   diy: "Hobby & Nástroje", electronics: "Elektronika", sport: "Sport",
-  fashion: "Móda", fastfood: "Fastfood", other: "Ostatní",
+  fashion: "Móda", fastfood: "Fastfood", toys: "Hračkářství", other: "Ostatní",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
