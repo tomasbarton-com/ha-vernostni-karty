@@ -18,11 +18,11 @@ const STORES = [
   ['decathlon', 'decathlon.cz'], ['sportisimo', 'sportisimo.cz'], ['hervis', 'hervis.cz'],
   ['hm', 'hm.com'], ['zara', 'zara.com'], ['reserved', 'reserved.com'],
   ['primark', 'primark.com'], ['ccc', 'ccc.eu'], ['deichmann', 'deichmann.com'],
-  ['newyorker', 'newyorker.de'], ['pepco', 'pepco.com'],
+  ['newyorker', 'newyorker.de'], ['pepco', 'pepco.com'], ['kik', 'kik.cz'],
   ['mcdonalds', 'mcdonalds.cz'], ['kfc', 'kfc.cz'], ['burgerking', 'burgerking.cz'],
   ['subway', 'subway.com'], ['pizzahut', 'pizzahut.cz'], ['starbucks', 'starbucks.cz'],
   ['costacoffee', 'costacoffee.cz'], ['bageterie', 'bageterie.com'],
-  ['ikea', 'ikea.cz'], ['okay', 'okay.cz'], ['kika', 'kika.cz'],
+  ['ikea', 'ikea.cz'], ['okay', 'okay.cz'], ['kika', 'kika-home.cz'],
   ['zoot', 'zoot.cz'], ['tchibo', 'tchibo.cz'], ['action', 'action.com'],
   ['flyingtiger', 'flyingtiger.com'],
 ];
