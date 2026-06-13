@@ -2,7 +2,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 
-const VERSION = "0.2.7";
+const VERSION = "0.3.0";
 
 // Bundled logos are copied to /config/www/loyalty-cards/logos/ on every integration
 // setup, so they are served at /local/loyalty-cards/logos/.
@@ -1543,8 +1543,12 @@ class LoyaltyCardsCardEditor extends HTMLElement {
   }
 }
 
-customElements.define("loyalty-cards-card-editor", LoyaltyCardsCardEditor);
-customElements.define("loyalty-cards-card", LoyaltyCardsCard);
+if (!customElements.get("loyalty-cards-card-editor")) {
+  customElements.define("loyalty-cards-card-editor", LoyaltyCardsCardEditor);
+}
+if (!customElements.get("loyalty-cards-card")) {
+  customElements.define("loyalty-cards-card", LoyaltyCardsCard);
+}
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "loyalty-cards-card",
