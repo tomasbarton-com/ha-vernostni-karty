@@ -65,6 +65,7 @@ const CZECH_STORES = [
   { name: "Sparkys",             category: "toys",        logo: "sparkys",      logo_domain: "sparkys.cz" },
   { name: "Bambule",             category: "toys",        logo: "bambule",      logo_domain: "bambule.cz" },
   { name: "Hamleys",             category: "toys",        logo: "hamleys",      logo_domain: "hamleys.cz" },
+  { name: "Dráčik",              category: "toys",        logo: "dracik",       logo_domain: "dracik.cz" },
 ];
 
 const CATEGORY_LABELS = {
