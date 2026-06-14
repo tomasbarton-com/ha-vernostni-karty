@@ -52,6 +52,8 @@ class LoyaltyCardStore:
             data["settings"] = self._default_data()["settings"]
         if "stores" not in data:
             data["stores"] = []
+        for store in data.get("stores", []):
+            store.setdefault("store_key", None)
 
     async def async_save(self) -> None:
         await self._store.async_save(self._data)
@@ -69,11 +71,13 @@ class LoyaltyCardStore:
         name: str,
         category: str = "other",
         tile_color: str = "#1976d2",
+        store_key: str | None = None,
     ) -> dict:
         store = {
             "id": _new_id(),
             "name": name,
             "category": category,
+            "store_key": store_key,
             "logo_path": None,
             "tile_color": tile_color,
             "locations": [],
@@ -87,7 +91,7 @@ class LoyaltyCardStore:
         store = self.get_store(store_id)
         if store is None:
             return None
-        allowed = {"name", "category", "tile_color", "logo_path"}
+        allowed = {"name", "category", "tile_color", "logo_path", "store_key"}
         for k, v in kwargs.items():
             if k in allowed:
                 store[k] = v

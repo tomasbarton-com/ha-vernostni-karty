@@ -12,11 +12,15 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
+    BUNDLED_LOGO_URL,
+    CATEGORY_LABELS,
     CONF_DEVICE_TRACKERS,
     CONF_GLOBAL_PROXIMITY_M,
     CONF_NOTIFICATIONS_ENABLED,
     CONF_NOTIFICATION_DWELL_MINUTES,
+    CZECH_STORES,
     EVENT_DATA_UPDATED,
+    WS_TYPE_GET_CATALOG,
     WS_TYPE_GET_DATA,
 )
 from .logo_manager import async_delete_logo, async_download_logo, async_save_logo_base64
@@ -102,6 +106,7 @@ def _register_services(hass: HomeAssistant, store: LoyaltyCardStore) -> None:
             name=call.data["name"],
             category=call.data.get("category", "other"),
             tile_color=call.data.get("tile_color", "#1976d2"),
+            store_key=call.data.get("store_key"),
         )
         _fire_updated(hass)
 
@@ -200,6 +205,14 @@ def _register_services(hass: HomeAssistant, store: LoyaltyCardStore) -> None:
     hass.services.async_register(DOMAIN, "update_settings", handle_update_settings)
 
 
+def _logo_url_for_store(s: dict) -> str | None:
+    if s.get("logo_path"):
+        return s["logo_path"]
+    if s.get("store_key"):
+        return f"{BUNDLED_LOGO_URL}/{s['store_key']}.png"
+    return None
+
+
 def _register_websocket(hass: HomeAssistant, store: LoyaltyCardStore) -> None:
 
     @websocket_api.websocket_command({
@@ -211,6 +224,30 @@ def _register_websocket(hass: HomeAssistant, store: LoyaltyCardStore) -> None:
         connection: websocket_api.ActiveConnection,
         msg: dict,
     ) -> None:
-        connection.send_result(msg["id"], store.data)
+        data = dict(store.data)
+        data["stores"] = [
+            {**s, "logo_url": _logo_url_for_store(s)}
+            for s in data.get("stores", [])
+        ]
+        connection.send_result(msg["id"], data)
+
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_TYPE_GET_CATALOG,
+    })
+    @callback
+    def ws_get_catalog(
+        hass: HomeAssistant,
+        connection: websocket_api.ActiveConnection,
+        msg: dict,
+    ) -> None:
+        catalog_stores = [
+            {**s, "logo_url": f"{BUNDLED_LOGO_URL}/{s['key']}.png"}
+            for s in CZECH_STORES
+        ]
+        connection.send_result(msg["id"], {
+            "stores": catalog_stores,
+            "category_labels": CATEGORY_LABELS,
+        })
 
     websocket_api.async_register_command(hass, ws_get_data)
+    websocket_api.async_register_command(hass, ws_get_catalog)

@@ -9,6 +9,12 @@ add_store:
       example: "Albert"
       selector:
         text:
+    store_key:
+      name: Klíč obchodu
+      description: Klíč z katalogu obchodů (loyalty_cards/get_catalog) – přiřadí bundled logo
+      example: "albert"
+      selector:
+        text:
     category:
       name: Kategorie
       description: Kategorie obchodu
@@ -24,6 +30,7 @@ add_store:
             - sport
             - fashion
             - fastfood
+            - toys
             - other
     tile_color:
       name: Barva dlaždice
@@ -46,6 +53,11 @@ update_store:
       name: Název
       selector:
         text:
+    store_key:
+      name: Klíč obchodu
+      description: Klíč z katalogu obchodů pro přiřazení bundled loga
+      selector:
+        text:
     category:
       name: Kategorie
       selector:
@@ -59,6 +71,7 @@ update_store:
             - sport
             - fashion
             - fastfood
+            - toys
             - other
     tile_color:
       name: Barva dlaždice
