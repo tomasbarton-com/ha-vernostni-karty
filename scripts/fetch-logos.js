@@ -7,26 +7,42 @@ const fs = require('fs');
 const path = require('path');
 
 const STORES = [
-  ['albert', 'albert.cz'], ['billa', 'billa.cz'], ['kaufland', 'kaufland.cz'],
-  ['lidl', 'lidl.cz'], ['penny', 'penny.cz'], ['tesco', 'tesco.cz'],
+  // Potraviny
+  ['albert', 'albert.cz'], ['billa', 'billa.cz'], ['kaufland', 'kaufland.com'],
+  ['lidl', 'lidl.cz'], ['penny', 'penny.cz'], ['tesco', 'tescocr.cz'],
   ['globus', 'globus.cz'], ['coop', 'coop.cz'], ['norma', 'norma.de'],
+  ['zabka', 'zabka.cz'],
+  // Drogerie
   ['dm', 'dm.cz'], ['rossmann', 'rossmann.cz'], ['teta', 'tetadrogerie.cz'],
+  ['sephora', 'sephora.cz'], ['douglas', 'douglas.cz'],
+  // Lékárna
   ['drmax', 'drmax.cz'], ['benu', 'benu.cz'], ['pilulka', 'pilulka.cz'],
-  ['lekarnacz', 'lekarna.cz'], ['obi', 'obi.cz'], ['bauhaus', 'bauhaus.cz'],
-  ['hornbach', 'hornbach.cz'], ['alza', 'alza.cz'], ['czc', 'czc.cz'],
-  ['datart', 'datart.cz'], ['electroworld', 'electroworld.cz'],
+  ['lekarnacz', 'lekarna.cz'],
+  // DIY
+  ['obi', 'obi.cz'], ['bauhaus', 'bauhaus.cz'], ['hornbach', 'hornbach.cz'],
+  // Elektronika
+  ['alza', 'alza.cz'], ['czc', 'czc.cz'], ['datart', 'datart.cz'],
+  // Sport
   ['decathlon', 'decathlon.cz'], ['sportisimo', 'sportisimo.cz'], ['hervis', 'hervis.cz'],
+  ['intersport', 'intersport.cz'],
+  // Móda
   ['hm', 'hm.com'], ['zara', 'zara.com'], ['reserved', 'reserved.com'],
   ['primark', 'primark.com'], ['ccc', 'ccc.eu'], ['deichmann', 'deichmann.com'],
-  ['newyorker', 'newyorker.de'], ['pepco', 'pepco.com'], ['kik', 'kik.cz'],
+  ['newyorker', 'newyorker.de'], ['pepco', 'pepco.cz'], ['kik', 'kik.cz'],
+  ['zoot', 'zoot.cz'],
+  // Fastfood
   ['mcdonalds', 'mcdonalds.cz'], ['kfc', 'kfc.cz'], ['burgerking', 'burgerking.cz'],
-  ['subway', 'subway.com'], ['pizzahut', 'pizzahut.cz'], ['starbucks', 'starbucks.cz'],
-  ['costacoffee', 'costacoffee.cz'], ['bageterie', 'bageterie.com'],
-  ['ikea', 'ikea.cz'], ['okay', 'okay.cz'], ['kika', 'kika-home.cz'],
-  ['zoot', 'zoot.cz'], ['tchibo', 'tchibo.cz'], ['action', 'action.com'],
-  ['flyingtiger', 'flyingtiger.com'],
+  ['subway', 'subway.com'], ['pizzahut', 'pizzahut.com'], ['starbucks', 'starbucks.cz'],
+  ['costacoffee', 'costacoffee.com'], ['bageterie', 'bageterie.com'],
+  // Hračkářství
   ['sparkys', 'sparkys.cz'], ['bambule', 'bambule.cz'], ['hamleys', 'hamleys.cz'],
   ['dracik', 'dracik.cz'],
+  // Domácnost
+  ['ikea', 'ikea.com'], ['jysk', 'jysk.cz'], ['kika', 'kika-home.cz'],
+  ['okay', 'okay.cz'], ['action', 'action.com'], ['flyingtiger', 'flyingtiger.com'],
+  ['lysi', 'zahradalisy.cz'],
+  // Ostatní
+  ['tchibo', 'tchibo.cz'],
 ];
 
 const OUT_DIR = path.join(__dirname, '..', 'custom_components', 'loyalty_cards', 'www', 'logos');

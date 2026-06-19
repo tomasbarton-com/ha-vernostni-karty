@@ -20,6 +20,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "fashion":     "Móda",
     "fastfood":    "Fastfood",
     "toys":        "Hračkářství",
+    "domacnost":   "Domácnost",
     "other":       "Ostatní",
 }
 
@@ -37,10 +38,13 @@ CZECH_STORES: list[dict] = [
     {"key": "globus",       "name": "Globus",               "category": "groceries"},
     {"key": "coop",         "name": "COOP",                 "category": "groceries"},
     {"key": "norma",        "name": "Norma",                "category": "groceries"},
+    {"key": "zabka",        "name": "Žabka",                "category": "groceries"},
     # Drogerie
     {"key": "dm",           "name": "dm",                   "category": "drugstore"},
     {"key": "rossmann",     "name": "Rossmann",             "category": "drugstore"},
     {"key": "teta",         "name": "Teta",                 "category": "drugstore"},
+    {"key": "sephora",      "name": "Sephora",              "category": "drugstore"},
+    {"key": "douglas",      "name": "Douglas",              "category": "drugstore"},
     # Lékárna
     {"key": "drmax",        "name": "Dr. Max",              "category": "pharmacy"},
     {"key": "benu",         "name": "Benu",                 "category": "pharmacy"},
@@ -54,11 +58,11 @@ CZECH_STORES: list[dict] = [
     {"key": "alza",         "name": "Alza",                 "category": "electronics"},
     {"key": "czc",          "name": "CZC",                  "category": "electronics"},
     {"key": "datart",       "name": "Datart",               "category": "electronics"},
-    {"key": "electroworld", "name": "Electroworld",         "category": "electronics"},
     # Sport
     {"key": "decathlon",    "name": "Decathlon",            "category": "sport"},
     {"key": "sportisimo",   "name": "Sportisimo",           "category": "sport"},
     {"key": "hervis",       "name": "Hervis",               "category": "sport"},
+    {"key": "intersport",   "name": "Intersport",           "category": "sport"},
     # Móda
     {"key": "hm",           "name": "H&M",                  "category": "fashion"},
     {"key": "zara",         "name": "Zara",                 "category": "fashion"},
@@ -84,13 +88,16 @@ CZECH_STORES: list[dict] = [
     {"key": "bambule",      "name": "Bambule",              "category": "toys"},
     {"key": "hamleys",      "name": "Hamleys",              "category": "toys"},
     {"key": "dracik",       "name": "Dráčik",               "category": "toys"},
+    # Domácnost
+    {"key": "ikea",         "name": "IKEA",                 "category": "domacnost"},
+    {"key": "jysk",         "name": "Jysk",                 "category": "domacnost"},
+    {"key": "kika",         "name": "Kika",                 "category": "domacnost"},
+    {"key": "okay",         "name": "Okay",                 "category": "domacnost"},
+    {"key": "action",       "name": "Action",               "category": "domacnost"},
+    {"key": "flyingtiger",  "name": "Flying Tiger",         "category": "domacnost"},
+    {"key": "lysi",         "name": "Zahradnictví Lysi",    "category": "domacnost"},
     # Ostatní
-    {"key": "ikea",         "name": "IKEA",                 "category": "other"},
-    {"key": "okay",         "name": "Okay",                 "category": "other"},
-    {"key": "kika",         "name": "Kika",                 "category": "other"},
     {"key": "tchibo",       "name": "Tchibo",               "category": "other"},
-    {"key": "action",       "name": "Action",               "category": "other"},
-    {"key": "flyingtiger",  "name": "Flying Tiger",         "category": "other"},
 ]
 
 BARCODE_TYPES = [
