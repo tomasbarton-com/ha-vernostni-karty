@@ -6,6 +6,7 @@ from pathlib import Path
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 import homeassistant.helpers.config_validation as cv
@@ -53,11 +54,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.async_add_executor_job(_deploy_logos, hass)
 
-    hass.http.register_static_path(
-        "/loyalty-card-logos",
-        hass.config.path("image", "loyalty-card-logos"),
-        cache_headers=False,
-    )
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(
+            url_path="/loyalty-card-logos",
+            path=hass.config.path("image", "loyalty-card-logos"),
+            cache_headers=False,
+        )
+    ])
 
     _register_services(hass, store)
     _register_websocket(hass, store)
