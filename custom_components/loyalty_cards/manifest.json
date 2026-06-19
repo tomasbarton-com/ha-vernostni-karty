@@ -1,8 +1,8 @@
 {
   "domain": "loyalty_cards",
   "name": "Věrnostní karty",
-  "version": "0.3.3",
-  "homeassistant": "2024.1.0",
+  "version": "0.3.4",
+  "homeassistant": "2026.1.0",
   "codeowners": ["@tomasbarton-com"],
   "requirements": [],
   "dependencies": [],

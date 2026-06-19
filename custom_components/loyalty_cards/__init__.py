@@ -90,7 +90,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
         notifications_enabled=opts.get(CONF_NOTIFICATIONS_ENABLED, True),
         notification_dwell_minutes=opts.get(CONF_NOTIFICATION_DWELL_MINUTES, 7),
     )
-    hass.bus.fire(EVENT_DATA_UPDATED)
+    hass.bus.async_fire(EVENT_DATA_UPDATED)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

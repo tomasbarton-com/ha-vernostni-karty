@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import base64
 import logging
-import os
 import re
 from pathlib import Path
 
@@ -29,15 +27,27 @@ def _ext_from_mime(mime: str) -> str:
     }.get(mime, ".png")
 
 
+def _write_logo(dest: Path, data: bytes) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+
+
+def _delete_logo_files(logo_dir: Path, store_id: str) -> bool:
+    deleted = False
+    for ext in (".png", ".jpg", ".gif", ".webp", ".svg"):
+        path = logo_dir / f"{store_id}{ext}"
+        if path.exists():
+            path.unlink()
+            deleted = True
+    return deleted
+
+
 async def async_download_logo(hass: HomeAssistant, store_id: str, url: str) -> str | None:
     try:
         import aiohttp
     except ImportError:
         _LOGGER.error("aiohttp not available")
         return None
-
-    logo_dir = _logo_dir(hass)
-    logo_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -54,8 +64,8 @@ async def async_download_logo(hass: HomeAssistant, store_id: str, url: str) -> s
                     _LOGGER.warning("Logo file too large: %d bytes", len(data))
                     return None
                 ext = _ext_from_mime(content_type)
-                dest = logo_dir / f"{store_id}{ext}"
-                dest.write_bytes(data)
+                dest = _logo_dir(hass) / f"{store_id}{ext}"
+                await hass.async_add_executor_job(_write_logo, dest, data)
                 _LOGGER.debug("Logo saved to %s", dest)
                 return f"/loyalty-card-logos/{store_id}{ext}"
     except Exception:
@@ -66,9 +76,6 @@ async def async_download_logo(hass: HomeAssistant, store_id: str, url: str) -> s
 async def async_save_logo_base64(
     hass: HomeAssistant, store_id: str, data_url: str
 ) -> str | None:
-    logo_dir = _logo_dir(hass)
-    logo_dir.mkdir(parents=True, exist_ok=True)
-
     match = re.match(r"data:(image/[^;]+);base64,(.+)", data_url, re.DOTALL)
     if not match:
         _LOGGER.warning("Invalid data URL for logo upload")
@@ -90,22 +97,12 @@ async def async_save_logo_base64(
         return None
 
     ext = _ext_from_mime(mime)
-    dest = logo_dir / f"{store_id}{ext}"
-
-    def _write() -> None:
-        dest.write_bytes(raw)
-
-    await asyncio.get_event_loop().run_in_executor(None, _write)
+    dest = _logo_dir(hass) / f"{store_id}{ext}"
+    await hass.async_add_executor_job(_write_logo, dest, raw)
     _LOGGER.debug("Logo saved from upload to %s", dest)
     return f"/loyalty-card-logos/{store_id}{ext}"
 
 
 async def async_delete_logo(hass: HomeAssistant, store_id: str) -> bool:
     logo_dir = _logo_dir(hass)
-    deleted = False
-    for ext in (".png", ".jpg", ".gif", ".webp", ".svg"):
-        path = logo_dir / f"{store_id}{ext}"
-        if path.exists():
-            path.unlink()
-            deleted = True
-    return deleted
+    return await hass.async_add_executor_job(_delete_logo_files, logo_dir, store_id)
