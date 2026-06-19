@@ -64,7 +64,7 @@ function fetchUrl(url, redirects = 10) {
   });
 }
 
-const MIN_IMAGE_SIZE = 2000; // reject tiny favicons (< 2 KB)
+const MIN_IMAGE_SIZE = 500; // reject clearly invalid responses (HTML error pages are much larger)
 
 function isValidImage(buf) {
   if (buf.length < MIN_IMAGE_SIZE) return false;
@@ -76,7 +76,7 @@ function isValidImage(buf) {
   if (buf[0] === 0x47 && buf[1] === 0x49) return true;
   // WebP
   if (buf[0] === 0x52 && buf[1] === 0x49 && buf[8] === 0x57) return true;
-  // ICO – only accept if large enough (embedded 256px icon)
+  // ICO
   if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01) return true;
   return false;
 }
@@ -85,12 +85,7 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function sourceUrls(domain) {
   return [
-    // Clearbit Logo API – proper brand logos
-    `https://logo.clearbit.com/${domain}`,
-    // Brandfetch CDN – high quality brand logos
-    `https://cdn.brandfetch.io/${domain}/w/400/h/400/format/png`,
-    `https://cdn.brandfetch.io/${domain}/w/400/h/400`,
-    // Favicon.im larger – user-confirmed good source for CZ stores
+    // Favicon.im – good source for CZ stores
     `https://favicon.im/${domain}?larger=true`,
     // Google Favicons HD
     `https://www.google.com/s2/favicons?domain=https://${domain}&sz=256`,
