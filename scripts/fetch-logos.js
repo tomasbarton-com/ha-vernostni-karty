@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Downloads store logos and saves them as PNG/ICO files.
+// Downloads store logos and saves them with their native extension.
 // Sources tried in order per domain until one succeeds.
 const https = require('https');
 const http = require('http');
@@ -80,21 +80,22 @@ function fetchUrl(url, redirects = 10) {
   });
 }
 
-const MIN_IMAGE_SIZE = 500; // reject clearly invalid responses (HTML error pages are much larger)
+const MIN_IMAGE_SIZE = 64; // reject sub-minimal responses (HTML error pages are much larger)
+const LOGO_EXTS = ['.png', '.jpg', '.gif', '.webp', '.ico', '.svg'];
+
+function detectExt(buf) {
+  if (buf[0] === 0x89 && buf[1] === 0x50) return '.png';
+  if (buf[0] === 0xFF && buf[1] === 0xD8) return '.jpg';
+  if (buf[0] === 0x47 && buf[1] === 0x49) return '.gif';
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf.length > 8 && buf[8] === 0x57) return '.webp';
+  if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01) return '.ico';
+  // SVG: starts with <svg (3c73) or <?xml (3c3f)
+  if (buf[0] === 0x3c && buf.length > 1 && (buf[1] === 0x73 || buf[1] === 0x3f)) return '.svg';
+  return null;
+}
 
 function isValidImage(buf) {
-  if (buf.length < MIN_IMAGE_SIZE) return false;
-  // PNG magic
-  if (buf[0] === 0x89 && buf[1] === 0x50) return true;
-  // JPEG magic
-  if (buf[0] === 0xFF && buf[1] === 0xD8) return true;
-  // GIF magic
-  if (buf[0] === 0x47 && buf[1] === 0x49) return true;
-  // WebP
-  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[8] === 0x57) return true;
-  // ICO
-  if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01) return true;
-  return false;
+  return buf.length >= MIN_IMAGE_SIZE && detectExt(buf) !== null;
 }
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -118,26 +119,33 @@ function sourceUrls(domain) {
 async function main() {
   let ok = 0, skip = 0, fail = 0;
   for (const [key, domain] of STORES) {
-    const outFile = path.join(OUT_DIR, `${key}.png`);
-    // Skip only if file exists AND is a valid image (not an HTML error page)
-    if (fs.existsSync(outFile)) {
-      const existing = fs.readFileSync(outFile);
+    // Check if any valid logo file already exists for this key
+    let existingFile = null;
+    for (const ext of LOGO_EXTS) {
+      const candidate = path.join(OUT_DIR, `${key}${ext}`);
+      if (fs.existsSync(candidate)) { existingFile = candidate; break; }
+    }
+
+    if (existingFile) {
+      const existing = fs.readFileSync(existingFile);
       if (isValidImage(existing)) {
-        process.stdout.write(`SKIP ${key} (${existing.length} B)\n`);
+        process.stdout.write(`SKIP ${key} (${path.extname(existingFile)}, ${existing.length} B)\n`);
         skip++;
         continue;
       }
       // Invalid file — delete and re-download
-      fs.unlinkSync(outFile);
+      fs.unlinkSync(existingFile);
     }
 
     let downloaded = false;
     for (const url of sourceUrls(domain)) {
       try {
         const data = await fetchUrl(url);
-        if (!isValidImage(data)) throw new Error(`Not an image (${data.length}B, starts: ${data.slice(0,4).toString('hex')})`);
+        const ext = detectExt(data);
+        if (!ext || data.length < MIN_IMAGE_SIZE) throw new Error(`Not an image (${data.length}B, starts: ${data.slice(0,4).toString('hex')})`);
+        const outFile = path.join(OUT_DIR, `${key}${ext}`);
         fs.writeFileSync(outFile, data);
-        process.stdout.write(`OK   ${key} via ${new URL(url).hostname} (${data.length} B)\n`);
+        process.stdout.write(`OK   ${key} via ${new URL(url).hostname} (${ext}, ${data.length} B)\n`);
         ok++;
         downloaded = true;
         break;

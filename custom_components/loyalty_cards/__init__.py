@@ -52,7 +52,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN]["store"] = store
 
-    await hass.async_add_executor_job(_deploy_logos, hass)
+    logo_map = await hass.async_add_executor_job(_deploy_logos, hass)
+    hass.data[DOMAIN]["logo_map"] = logo_map
 
     await hass.http.async_register_static_paths([
         StaticPathConfig(
@@ -68,17 +69,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-def _deploy_logos(hass: HomeAssistant) -> None:
-    """Copy bundled logos to /config/www/loyalty-cards/logos/ — always overwrite."""
+def _deploy_logos(hass: HomeAssistant) -> dict[str, str]:
+    """Copy bundled logos to /config/www/loyalty-cards/logos/ — always overwrite.
+
+    Returns a mapping of store key → filename (e.g. {"albert": "albert.png"}).
+    """
     src_logos = Path(__file__).parent / "www" / "logos"
     dst_logos = Path(hass.config.path("www", "loyalty-cards", "logos"))
     dst_logos.mkdir(parents=True, exist_ok=True)
+    logo_map: dict[str, str] = {}
     if src_logos.is_dir():
         for f in src_logos.iterdir():
             if f.is_file():
                 shutil.copy2(str(f), str(dst_logos / f.name))
+                logo_map[f.stem] = f.name
     # Ensure user logo directory exists for static path registration
     Path(hass.config.path("image", "loyalty-card-logos")).mkdir(parents=True, exist_ok=True)
+    return logo_map
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -208,10 +215,14 @@ def _register_services(hass: HomeAssistant, store: LoyaltyCardStore) -> None:
     hass.services.async_register(DOMAIN, "update_settings", handle_update_settings)
 
 
-def _logo_url_for_store(s: dict) -> str | None:
+def _logo_url_for_store(hass: HomeAssistant, s: dict) -> str | None:
     if s.get("logo_path"):
         return s["logo_path"]
     if s.get("store_key"):
+        logo_map: dict[str, str] = hass.data[DOMAIN].get("logo_map", {})
+        filename = logo_map.get(s["store_key"])
+        if filename:
+            return f"{BUNDLED_LOGO_URL}/{filename}"
         return f"{BUNDLED_LOGO_URL}/{s['store_key']}.png"
     return None
 
@@ -229,7 +240,7 @@ def _register_websocket(hass: HomeAssistant, store: LoyaltyCardStore) -> None:
     ) -> None:
         data = dict(store.data)
         data["stores"] = [
-            {**s, "logo_url": _logo_url_for_store(s)}
+            {**s, "logo_url": _logo_url_for_store(hass, s)}
             for s in data.get("stores", [])
         ]
         connection.send_result(msg["id"], data)
@@ -243,8 +254,9 @@ def _register_websocket(hass: HomeAssistant, store: LoyaltyCardStore) -> None:
         connection: websocket_api.ActiveConnection,
         msg: dict,
     ) -> None:
+        logo_map: dict[str, str] = hass.data[DOMAIN].get("logo_map", {})
         catalog_stores = [
-            {**s, "logo_url": f"{BUNDLED_LOGO_URL}/{s['key']}.png"}
+            {**s, "logo_url": f"{BUNDLED_LOGO_URL}/{logo_map[s['key']]}" if s['key'] in logo_map else f"{BUNDLED_LOGO_URL}/{s['key']}.png"}
             for s in CZECH_STORES
         ]
         connection.send_result(msg["id"], {
